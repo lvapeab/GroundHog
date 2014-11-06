@@ -203,6 +203,8 @@ class RecurrentLayerWithSearch(Layer):
                  reseter_activation=TT.nnet.sigmoid,
                  weight_noise=False,
                  deep_attention=None,
+                 deep_attention_n_hids=None,
+                 deep_attention_acts=None,
                  name=None):
         logger.debug("RecurrentLayerWithSearch is used")
 
@@ -234,6 +236,8 @@ class RecurrentLayerWithSearch(Layer):
         self.reseter_activation = reseter_activation
         self.c_dim = c_dim
         self.deep_attention = deep_attention
+        self.deep_attention_n_hids = deep_attention_n_hids
+        self.deep_attention_acts = deep_attention_acts
 
         assert rng is not None, "random number generator should not be empty!"
 
@@ -290,14 +294,12 @@ class RecurrentLayerWithSearch(Layer):
         self.params.append(self.D_pe)
         if self.deep_attention:
             self.DatN = MultiLayer(rng=self.rng,
-                                   n_in=2*self.n_hid, # birnn enc-hids + dec-hid
-                                   n_hids=self.deep_attention['n_hids'],
-                                   activation=self.deep_attention['activations'],
+                                   n_in=self.n_hid, # birnn enc-hids + dec-hid
+                                   n_hids=self.deep_attention_n_hids,
+                                   activation=self.deep_attention_acts,
                                    name="DatN_%s"%self.name)
             [self.params.append(param) for param in self.DatN.params]
         self.params_grad_scale = [self.grad_scale for x in self.params]
-
-
 
     def set_decoding_layers(self, c_inputer, c_reseter, c_updater):
         self.c_inputer = c_inputer
@@ -364,7 +366,7 @@ class RecurrentLayerWithSearch(Layer):
             c = c[:, None, :]
 
         # Warning: either source_num or target_num should be equal,
-        #          or on of them sould be 1 (they have to broadcast)
+        #          or one of them should be 1 (they have to broadcast)
         #          for the following code to make any sense.
         source_len = c.shape[0]
         source_num = c.shape[1]
@@ -398,7 +400,6 @@ class RecurrentLayerWithSearch(Layer):
         normalizer = energy.sum(axis=0)
 
         # Get probabilities.:w
-
         probs = energy / normalizer
 
         # Calculate weighted sums of source annotations.
@@ -654,7 +655,10 @@ class EncoderDecoderBase(object):
         rec_layer = eval(prefix_lookup(self.state, self.prefix, 'rec_layer'))
         add_args = dict()
         if rec_layer == RecurrentLayerWithSearch:
-            add_args = dict(c_dim=self.state['c_dim'],deep_attention=self.state['deep_attention'])
+            add_args = dict(c_dim=self.state['c_dim'],
+                            deep_attention=self.state['deep_attention'],
+                            deep_attention_n_hids=self.state['deep_attention_n_hids'],
+                            deep_attention_acts=self.state['deep_attention_acts'])
         for level in range(self.num_levels):
             self.transitions.append(rec_layer(
                     self.rng,
@@ -1478,7 +1482,7 @@ class RNNEncoderDecoder(object):
                     inputs=[self.c, self.step_num, self.gen_y] + self.current_states,
                     outputs=[self.decoder.build_next_probs_predictor(
                         self.c, self.step_num, self.gen_y, self.current_states)],
-                    name="next_probs_fn",on_unused_input='warn')
+                    name="next_probs_fn",on_unused_input='warn',mode='DebugMode')
         return self.next_probs_fn
 
     def create_next_states_computer(self):

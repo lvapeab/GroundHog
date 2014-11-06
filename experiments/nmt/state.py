@@ -279,13 +279,13 @@ def prototype_encdec_state():
     state['word_indx'] = baseDir + 'vocab.tr.pkl'
     state['word_indx_trgt'] = baseDir + 'vocab.en.pkl'
 
-    state['null_sym_source'] = 3000
-    state['null_sym_target'] = 3000
+    state['null_sym_source'] = 300
+    state['null_sym_target'] = 300
     state['n_sym_source'] = state['null_sym_source'] + 1
     state['n_sym_target'] = state['null_sym_target'] + 1
 
     state['seqlen'] = 30
-    state['bs']  = 80
+    state['bs']  = 31
 
     state['dim'] = 100
     state['rank_n_approx'] = 40
@@ -303,14 +303,14 @@ def prototype_search_state():
     state['dec_rec_layer'] = 'RecurrentLayerWithSearch'
 
     state['deep_attention']= True
-    state['deep_attention_n_hids']= [50]
+    state['deep_attention_n_hids']= 100
     state['deep_attention_acts']= 'lambda x: TT.tanh(x)'
 
     state['search'] = True
     state['last_forward'] = False
     state['forward'] = True
     state['backward'] = True
-    state['seqlen'] = 50
+    state['seqlen'] = 25
     state['sort_k_batches'] = 20
     state['prefix'] = 'deepAttentionTest_'
 
