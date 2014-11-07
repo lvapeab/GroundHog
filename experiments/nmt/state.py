@@ -279,16 +279,16 @@ def prototype_encdec_state():
     state['word_indx'] = baseDir + 'vocab.tr.pkl'
     state['word_indx_trgt'] = baseDir + 'vocab.en.pkl'
 
-    state['null_sym_source'] = 300
-    state['null_sym_target'] = 300
+    state['null_sym_source'] = 30000
+    state['null_sym_target'] = 30000
     state['n_sym_source'] = state['null_sym_source'] + 1
     state['n_sym_target'] = state['null_sym_target'] + 1
 
     state['seqlen'] = 30
-    state['bs']  = 31
+    state['bs']  = 80
 
-    state['dim'] = 100
-    state['rank_n_approx'] = 40
+    state['dim'] = 1500
+    state['rank_n_approx'] = 420
 
     state['prefix'] = 'encdec_'
 
@@ -312,7 +312,7 @@ def prototype_search_state():
     state['backward'] = True
     state['seqlen'] = 25
     state['sort_k_batches'] = 20
-    state['prefix'] = 'deepAttentionTest_'
+    state['prefix'] = 'deepAttention_'
 
     return state
 
