@@ -537,7 +537,7 @@ class RecurrentLayerWithSearchAndLM(Layer):
                  deep_attention=None,
                  deep_attention_n_hids=None,
                  deep_attention_acts=None,
-                 languate_model=None,
+                 external_lm=None,
                  name=None):
         logger.debug("RecurrentLayerWithSearchAndLM is used")
 
@@ -546,6 +546,10 @@ class RecurrentLayerWithSearchAndLM(Layer):
         assert reseting == True
         assert dropout == 1.
         assert weight_noise == False
+        assert type(external_lm) is dict and all([el in external_lm
+                                                  for el in {'lm_state_file',
+                                                             'lm_model_file',
+                                                             'lm_type'}])
         updater_activation = gater_activation
 
         if type(init_fn) is str or type(init_fn) is unicode:
@@ -558,7 +562,7 @@ class RecurrentLayerWithSearchAndLM(Layer):
             updater_activation = eval(updater_activation)
         if type(reseter_activation) is str or type(reseter_activation) is unicode:
             reseter_activation = eval(reseter_activation)
-
+        
         self.scale = scale
         self.activation = activation
         self.n_hids = n_hids
@@ -571,7 +575,13 @@ class RecurrentLayerWithSearchAndLM(Layer):
         self.deep_attention = deep_attention
         self.deep_attention_n_hids = deep_attention_n_hids
         self.deep_attention_acts = deep_attention_acts
-        self.language_model = language_model
+        
+        self.language_model = eval(external_lm['lm_type'])(external_lm['lm_state_file'])
+        try:
+            self.language_model.load(external_lm['lm_model_file'])
+        except Exception:
+            print 'encdec: Corrupted language model file'
+            traceback.print_exc()
 
         assert rng is not None, "random number generator should not be empty!"
 
@@ -626,9 +636,11 @@ class RecurrentLayerWithSearchAndLM(Layer):
                 numpy.zeros((self.n_hids, 1), dtype="float32"),
                 name="D_%s"%self.name)
         self.params.append(self.D_pe)
+        
+        # initialize deep attention model
         if self.deep_attention:
             self.DatN = MultiLayer(rng=self.rng,
-                                   n_in=self.n_hid, # birnn enc-hids + dec-hid
+                                   n_in=self.n_hid,
                                    n_hids=self.deep_attention_n_hids,
                                    activation=self.deep_attention_acts,
                                    name="DatN_%s"%self.name)
@@ -683,6 +695,15 @@ class RecurrentLayerWithSearchAndLM(Layer):
         :type no_noise_bias: bool
         :param no_noise_bias: flag saying if weight noise should be added to
             the bias as well
+        
+        :type y: theano variable
+        :param y: 
+            TODO: fix comment below
+            if mode == evaluation
+                target sequences, matrix of word indices of shape (max_seq_len, batch_size),
+                where each column is a sequence
+            if mode != evaluation
+                a vector of previous words of shape (n_samples,)
         """
 
         updater_below = gater_below
@@ -693,6 +714,8 @@ class RecurrentLayerWithSearchAndLM(Layer):
         A_cp = self.A_cp
         B_hp = self.B_hp
         D_pe = self.D_pe
+
+        lm = self.language_model
 
         # The code works only with 3D tensors
         cndim = c.ndim
@@ -753,19 +776,26 @@ class RecurrentLayerWithSearchAndLM(Layer):
 
         # Feed the input to obtain potential new state.
         preactiv = TT.dot(reseted_state_before, W_hh) + state_below
-        h = self.activation(preactiv)
+        ht = self.activation(preactiv)
 
         # Update gate:
         # optionally reject the potential new state and use the new one.
         updater = self.updater_activation(TT.dot(state_before, G_hh) +
                 updater_below)
-        h = updater * h + (1-updater) * state_before
+        ht = updater * ht + (1-updater) * state_before
 
         if mask is not None:
-            if h.ndim ==2 and mask.ndim==1:
+            if ht.ndim ==2 and mask.ndim==1:
                 mask = mask.dimshuffle(0,'x')
-            h = mask * h + (1-mask) * state_before
+            ht = mask * ht + (1-mask) * state_before
 
+        # Feed previous label to the language model and  
+        # obtain its hidden representation 
+        #TODO: add LM forward graph here
+        hl = self.language_model.sample_fn()
+        
+        h = ht
+        
         results = [h, ctx]
         if return_alignment:
             results += [probs]
@@ -784,7 +814,8 @@ class RecurrentLayerWithSearchAndLM(Layer):
               use_noise=True,
               truncate_gradient=-1,
               no_noise_bias=False,
-              return_alignment=False):
+              return_alignment=False,
+              y=None):
 
         updater_below = gater_below
 
@@ -818,9 +849,9 @@ class RecurrentLayerWithSearchAndLM(Layer):
         if mask:
             sequences = [state_below, mask, updater_below, reseter_below]
             non_sequences = [c, c_mask, p_from_c]
-            #              seqs    | out |  non_seqs
-            fn = lambda x, m, g, r,   h,   c1, cm, pc : self.step_fprop(x, h, mask=m,
-                    gater_below=g, reseter_below=r,
+            #              seqs       | out |  non_seqs
+            fn = lambda x, m, g, r, y,   h,   c1, cm, pc : self.step_fprop(x, h, mask=m,
+                    gater_below=g, reseter_below=r, y=y,
                     c=c1, p_from_c=pc, c_mask=cm,
                     use_noise=use_noise, no_noise_bias=no_noise_bias,
                     return_alignment=return_alignment)
@@ -988,13 +1019,17 @@ class EncoderDecoderBase(object):
         self.transitions = []
         rec_layer = eval(prefix_lookup(self.state, self.prefix, 'rec_layer'))
         add_args = dict()
-        if rec_layer == RecurrentLayerWithSearch:
+        if any([(rec_layer==rr) for rr in [RecurrentLayerWithSearch, RecurrentLayerWithSearchAndLM]]):
             add_args = dict(c_dim=self.state['c_dim'],
                             deep_attention=self.state['deep_attention'],
                             deep_attention_n_hids=self.state['deep_attention_n_hids'],
                             deep_attention_acts= copy.deepcopy(self.state['deep_attention_acts']) 
                                                     if isinstance(self.state['deep_attention_acts'], list) else 
                                                     self.state['deep_attention_acts'])
+        #TODO: Check correctness
+        if rec_layer == RecurrentLayerWithSearchAndLM:
+            add_args.update(external_lm = self.state['external_lm'])
+                             
         for level in range(self.num_levels):
             self.transitions.append(rec_layer(
                     self.rng,
@@ -1445,6 +1480,9 @@ class Decoder(EncoderDecoderBase):
                 add_kwargs['c'] = c
                 add_kwargs['c_mask'] = c_mask
                 add_kwargs['return_alignment'] = self.compute_alignment
+                #TODO: Check if working.
+                if self.state['use_external_lm']:
+                    add_kwargs['y'] = y
                 if mode != Decoder.EVALUATION:
                     add_kwargs['step_num'] = step_num
             result = self.transitions[level](
