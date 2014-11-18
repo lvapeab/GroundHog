@@ -316,6 +316,34 @@ def prototype_search_state():
 
     return state
 
+def prototype_search_state_with_LM():
+    """
+    Recurrent layer with search and language model
+    """
+
+    state = prototype_encdec_state()
+
+    state['dec_rec_layer'] = 'RecurrentLayerWithSearchAndLM'
+
+    state['deep_attention']= False
+    state['deep_attention_n_hids']= [1500,1500]
+    state['deep_attention_acts']= [' lambda x: TT.tanh(x) ',' lambda x: TT.tanh(x) ']
+
+    state['use_external_lm'] = True
+    state['external_lm'] = {'lm_state_file':'/data/lisatmp3/firatorh/languageModelling/lm_state.pkl',
+                            'lm_model_file':'/data/lisatmp3/firatorh/languageModelling/lm_model.npz',
+                            'lm_type':'lambda x:x'}
+
+    state['search'] = True
+    state['last_forward'] = False
+    state['forward'] = True
+    state['backward'] = True
+    state['seqlen'] = 50
+    state['sort_k_batches'] = 20
+    state['prefix'] = 'searchStateWithLM_'
+
+    return state
+
 def prototype_phrase_lstm_state():
     state = prototype_phrase_state()
 
