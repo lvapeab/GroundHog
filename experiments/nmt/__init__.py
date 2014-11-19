@@ -9,3 +9,5 @@ from state import\
     prototype_encdec_state,\
     prototype_search_state,\
     prototype_search_state_with_LM
+    
+from dummyLM import DummyLM
