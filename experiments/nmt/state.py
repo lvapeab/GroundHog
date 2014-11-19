@@ -332,7 +332,7 @@ def prototype_search_state_with_LM():
     state['use_external_lm'] = True
     state['external_lm'] = {'lm_state_file':'/data/lisatmp3/firatorh/languageModelling/lm_state.pkl',
                             'lm_model_file':'/data/lisatmp3/firatorh/languageModelling/lm_model.npz',
-                            'lm_type':'lambda x:x'}
+                            'lm_type':'DummyLM'}
 
     state['search'] = True
     state['last_forward'] = False
