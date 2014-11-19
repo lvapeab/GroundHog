@@ -550,6 +550,8 @@ class RecurrentLayerWithSearchAndLM(Layer):
                                                   for el in {'lm_state_file',
                                                              'lm_model_file',
                                                              'lm_type'}])
+        assert rng is not None, "random number generator should not be empty!"
+        
         updater_activation = gater_activation
 
         if type(init_fn) is str or type(init_fn) is unicode:
@@ -576,14 +578,17 @@ class RecurrentLayerWithSearchAndLM(Layer):
         self.deep_attention_n_hids = deep_attention_n_hids
         self.deep_attention_acts = deep_attention_acts
         
-        self.language_model = eval(external_lm['lm_type'])(external_lm['lm_state_file'])
+        self.language_model = eval(external_lm['lm_type'])(external_lm['lm_state_file'],
+                                                           self.rng)
+        
+        # load language model, 
+        #FIXME: this is probably not the right place to do this
+        # but i'll do it anyway, till i get a stable version of this branch
         try:
             self.language_model.load(external_lm['lm_model_file'])
         except Exception:
             print 'encdec: Corrupted language model file'
             traceback.print_exc()
-
-        assert rng is not None, "random number generator should not be empty!"
 
         super(RecurrentLayerWithSearchAndLM, self).__init__(self.n_hids,
                 self.n_hids, rng, name)
