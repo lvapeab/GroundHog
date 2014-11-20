@@ -26,7 +26,7 @@ from groundhog.models import LM_Model
 from groundhog.datasets import PytablesBitextIterator
 from groundhog.utils import sample_zeros, sample_weights_orth, init_bias, sample_weights_classic
 import groundhog.utils as utils
-
+from experiments.nmt.language_model import LM_builder
 logger = logging.getLogger(__name__)
 
 def create_padded_batch(state, x, y, return_dict=False):
@@ -578,24 +578,33 @@ class RecurrentLayerWithSearchAndLM(Layer):
         self.deep_attention_n_hids = deep_attention_n_hids
         self.deep_attention_acts = deep_attention_acts
         
-        self.language_model = eval(external_lm['lm_type'])(external_lm['lm_state_file'],
-                                                           self.rng)
+        self.lm_builder = eval(external_lm['lm_type'])(
+                                self.state_from_file(external_lm['lm_state_file']),
+                                rng)
+        self.lm_builder.build()
+        self.language_model = LM_Model(
+            cost_layer = self.lm_builder.train_model,
+            weight_noise_amount=self.lm_builder.state['weight_noise_amount'],
+            valid_fn = None,
+            indx_word=self.lm_builder.state['indx_word'],
+            indx_word_src=self.lm_builder.state['indx_word'],
+            clean_before_noise_fn = False,
+            noise_fn = None,
+            rng = rng)
         
         # load language model, 
-        #FIXME: this is probably not the right place to do this
-        # but i'll do it anyway, till i get a stable version of this branch
-        try:
-            self.language_model.load(external_lm['lm_model_file'])
-        except Exception:
-            print 'encdec: Corrupted language model file'
-            traceback.print_exc()
+        #TODO: this is probably not the right place to do this
+        # but i'll do it anyway, till i get a stable version 
+        # of this branch - orhanf
+        self.language_model.load(external_lm['lm_model_file'])
 
         super(RecurrentLayerWithSearchAndLM, self).__init__(self.n_hids,
                 self.n_hids, rng, name)
 
         self.params = []
         self._init_params()
-
+        self.merge_params(self.language_model)
+    
     def _init_params(self):
         self.W_hh = theano.shared(
                 self.init_fn(self.n_hids,
@@ -672,7 +681,8 @@ class RecurrentLayerWithSearchAndLM(Layer):
                    use_noise=True,
                    no_noise_bias=False,
                    step_num=None,
-                   return_alignment=False):
+                   return_alignment=False,
+                   y=None):
         """
         Constructs the computational graph of this layer.
 
@@ -796,7 +806,7 @@ class RecurrentLayerWithSearchAndLM(Layer):
 
         # Feed previous label to the language model and  
         # obtain its hidden representation 
-        #TODO: add LM forward graph here
+        #TODO: add LM forward graph here - orhanf
         hl = self.language_model.sample_fn()
         
         h = ht
@@ -847,7 +857,7 @@ class RecurrentLayerWithSearchAndLM(Layer):
                 init_state = TT.alloc(floatX(0), batch_size, self.n_hids)
             else:
                 init_state = TT.alloc(floatX(0), self.n_hids)
-
+        
         p_from_c =  utils.dot(c, self.A_cp).reshape(
                 (c.shape[0], c.shape[1], self.n_hids))
 
@@ -886,6 +896,14 @@ class RecurrentLayerWithSearchAndLM(Layer):
         self.updates = updates
 
         return self.out
+    
+    def state_from_file(self, filename):
+        '''
+        load state pickle file into state dictionary
+        '''
+        #TODO: do this properly - orhanf
+        import cPickle
+        return cPickle.load(open(filename, "rb"))
 
 class ReplicateLayer(Layer):
 
@@ -1031,7 +1049,7 @@ class EncoderDecoderBase(object):
                             deep_attention_acts= copy.deepcopy(self.state['deep_attention_acts']) 
                                                     if isinstance(self.state['deep_attention_acts'], list) else 
                                                     self.state['deep_attention_acts'])
-        #TODO: Check correctness
+        #TODO: Check correctness - orhanf
         if rec_layer == RecurrentLayerWithSearchAndLM:
             add_args.update(external_lm = self.state['external_lm'])
                              
@@ -1485,7 +1503,7 @@ class Decoder(EncoderDecoderBase):
                 add_kwargs['c'] = c
                 add_kwargs['c_mask'] = c_mask
                 add_kwargs['return_alignment'] = self.compute_alignment
-                #TODO: Check if working.
+                #TODO: Check if working. - orhanf
                 if self.state['use_external_lm']:
                     add_kwargs['y'] = y
                 if mode != Decoder.EVALUATION:

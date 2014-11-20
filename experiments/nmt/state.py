@@ -330,9 +330,9 @@ def prototype_search_state_with_LM():
     state['deep_attention_acts']= [' lambda x: TT.tanh(x) ',' lambda x: TT.tanh(x) ']
 
     state['use_external_lm'] = True
-    state['external_lm'] = {'lm_state_file':'/data/lisatmp3/firatorh/languageModelling/lm_state.pkl',
-                            'lm_model_file':'/data/lisatmp3/firatorh/languageModelling/lm_model.npz',
-                            'lm_type':'DummyLM'}
+    state['external_lm'] = {'lm_state_file':'/data/lisatmp3/firatorh/languageModelling/corpora/fr_lm/lm_state.pkl',
+                            'lm_model_file':'/data/lisatmp3/firatorh/languageModelling/corpora/fr_lm/lm_model.npz',
+                            'lm_type':'LM_builder'}
 
     state['search'] = True
     state['last_forward'] = False

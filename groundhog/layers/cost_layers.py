@@ -1092,10 +1092,10 @@ class SoftmaxLayer(CostLayer):
 
             pos = TT.arange(shape0)*shape1
             new_targ = target + pos
-            #return class_probs.flatten()[new_targ]
+            return class_probs.flatten()[new_targ]
             
             #return classProbs[T.arange(tflat.shape[0]), tflat].flatten()
-            return TT.diag(class_probs.T[new_targ])
+            #return TT.diag(class_probs.T[new_targ])
 
         assert target, 'Computing the cost requires a target'
         target_shape = target.shape

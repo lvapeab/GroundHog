@@ -47,7 +47,7 @@ class DummyLM(Model):
         embedder_kwargs = dict(default_kwargs)
         embedder_kwargs.update(dict(
             n_in=self.state['rank_n_approx'],
-            n_hids=[self.state['n_hids'] * 1],
+            n_hids=self.state['n_hids'],
             activation=['lambda x:x']))
         
         #### Word Embedding
@@ -194,9 +194,13 @@ class DummyLM(Model):
         if x == 0:
             return None
         return x
+    
+    def save_params(self,filename):
+        logger.debug("DummyLM used as an external language model")
+    
 
 if __name__ == "__main__":
-    
+
     # create dummy state and model files here
     state = {}
     state['indx_word'] = "/data/lisatmp3/chokyun/mt/ivocab_target.pkl"
@@ -249,7 +253,7 @@ if __name__ == "__main__":
     
     rng = numpy.random.RandomState(state['seed'])
     dlm = DummyLM(state,rng)
-    dlm.build()
-    dlm.save('/data/lisatmp3/firatorh/languageModelling/lm_model.npz')
+    dlm.build()    
+    dlm.save_params('/data/lisatmp3/firatorh/languageModelling/lm_model.npz')
 
 
