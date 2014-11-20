@@ -10,4 +10,8 @@ from state import\
     prototype_search_state,\
     prototype_search_state_with_LM
     
-from dummyLM import DummyLM
+from language_model import\
+    LM_builder
+
+from state_lm import\
+    prototype_lm_state
