@@ -36,7 +36,8 @@ from groundhog.layers import\
         LastState,\
         DropOp,\
         Concatenate
-
+        
+logger = logging.getLogger(__name__)
 
 def none_if_zero(x):
     if x == 0:
@@ -221,6 +222,7 @@ def get_batch_iterator(state):
 class LM_builder(object):
 
     def __init__(self, state, rng):
+        logger.debug("Using LM_builder as auxiliary language model")
         self.state = state
         self.rng = rng
         self.skip_init = True if self.state['reload'] else False
@@ -233,7 +235,7 @@ class LM_builder(object):
         self.__create_layers__()
 
     def __create_layers__(self):
-        
+        logger.debug("_create_layers")
         self.emb_words = MultiLayer(
             self.rng,
             n_in=self.state['n_sym'],
@@ -310,6 +312,7 @@ class LM_builder(object):
         """
         Build Computational Graph
         """
+        logger.debug("_build computational graph")
         self.x = TT.lmatrix('x')
         self.x_mask = TT.matrix('x_mask')
         self.y = TT.lmatrix('y')
@@ -364,9 +367,10 @@ class LM_builder(object):
         ##### scan for iterating the single-step sampling multiple times
         [samples, summaries], updates = scan_sandbox(sample_fn,
                           states = [
-                              TT.alloc(numpy.int64(state['sampling_seed']), state['sample_steps']),
-                              TT.alloc(numpy.float32(0), 1, state['dim'])],
-                          n_steps= state['sample_steps'],
+                              TT.alloc(numpy.int64(self.state['sampling_seed']), 
+                                       self.state['sample_steps']),
+                              TT.alloc(numpy.float32(0), 1, self.state['dim'])],
+                          n_steps= self.state['sample_steps'],
                           name='sampler_scan')
 
         ##### define a Theano function
@@ -374,7 +378,42 @@ class LM_builder(object):
                 updates=updates, profile=False, name='sample_fn')
 
         return sample_fn
+    
+    def get_n_hids(self):
+        return self.state['dim']
+    
+    def get_ss_sampler(self):
+
+        def ss_sample_fn(word_tm1, h_tm1):
+            x_emb = self.emb_words(word_tm1, use_noise = False, one_step=True)  
+            x_input = self.inputer(x_emb)
+            update_signal = self.updater(x_emb)
+            reset_signal = self.reseter(x_emb)
+            h0 = self.rec(x_input, gater_below=update_signal,
+                          reseter_below=reset_signal,
+                          state_before=h_tm1, 
+                          one_step=True, use_noise=False)
+            word = self.output_layer.get_sample(state_below=h0)
+            return word, h0
+        
+        return ss_sample_fn
+    
+    def get_ht_sampler(self):
+        
+        def ht_sampler_fn(word_tm1,h_tm1):
+            x_emb = self.emb_words(word_tm1, use_noise = False, one_step=True)  
+            x_input = self.inputer(x_emb)
+            update_signal = self.updater(x_emb)
+            reset_signal = self.reseter(x_emb)
+            ht = self.rec(x_input, gater_below=update_signal,
+                          reseter_below=reset_signal,
+                          state_before=h_tm1, 
+                          one_step=True, use_noise=False)
+            return ht
  
+        return ht_sampler_fn
+        
+        
 if __name__ == '__main__':
     state = prototype_lm_state()
 

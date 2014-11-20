@@ -16,3 +16,5 @@ from ff_layers import maxpool, maxpool_ntimes, minpool, minpool_ntimes, \
 
 from cost_layers import SoftmaxLayer, SigmoidLayer, HierarchicalSoftmaxLayer
 from basic import Layer, Operator
+
+from search_layers import LM_wrapper

@@ -21,7 +21,8 @@ from groundhog.layers import\
         Shift,\
         LastState,\
         DropOp,\
-        Concatenate
+        Concatenate,\
+        LM_wrapper
 from groundhog.models import LM_Model
 from groundhog.datasets import PytablesBitextIterator
 from groundhog.utils import sample_zeros, sample_weights_orth, init_bias, sample_weights_classic
@@ -578,33 +579,23 @@ class RecurrentLayerWithSearchAndLM(Layer):
         self.deep_attention_n_hids = deep_attention_n_hids
         self.deep_attention_acts = deep_attention_acts
         
-        self.lm_builder = eval(external_lm['lm_type'])(
-                                self.state_from_file(external_lm['lm_state_file']),
-                                rng)
-        self.lm_builder.build()
-        self.language_model = LM_Model(
-            cost_layer = self.lm_builder.train_model,
-            weight_noise_amount=self.lm_builder.state['weight_noise_amount'],
-            valid_fn = None,
-            indx_word=self.lm_builder.state['indx_word'],
-            indx_word_src=self.lm_builder.state['indx_word'],
-            clean_before_noise_fn = False,
-            noise_fn = None,
-            rng = rng)
-        
-        # load language model, 
-        #TODO: this is probably not the right place to do this
-        # but i'll do it anyway, till i get a stable version 
-        # of this branch - orhanf
-        self.language_model.load(external_lm['lm_model_file'])
+        # this initializes language model and loads model from file 
+        self.lm_wrapper = LM_wrapper(lm_type=external_lm['lm_type'],
+                                     state_file=external_lm['lm_state_file'],
+                                     model_file=external_lm['lm_model_file'],
+                                     rng=rng)
 
         super(RecurrentLayerWithSearchAndLM, self).__init__(self.n_hids,
                 self.n_hids, rng, name)
 
         self.params = []
         self._init_params()
-        self.merge_params(self.language_model)
-    
+        self.merge_params(self.lm_wrapper)
+        for el in self.lm_wrapper.lm.output_layer.params:
+            idx = self.params.index(el) 
+            del self.params[idx]
+            del self.params_grad_scale[idx]
+        
     def _init_params(self):
         self.W_hh = theano.shared(
                 self.init_fn(self.n_hids,
@@ -672,8 +663,10 @@ class RecurrentLayerWithSearchAndLM(Layer):
     def step_fprop(self,
                    state_below,
                    state_before,
+                   lm_state_before,
                    gater_below=None,
-                   reseter_below=None,
+                   reseter_below=None,                   
+                   y=None,
                    mask=None,
                    c=None,
                    c_mask=None,
@@ -681,8 +674,7 @@ class RecurrentLayerWithSearchAndLM(Layer):
                    use_noise=True,
                    no_noise_bias=False,
                    step_num=None,
-                   return_alignment=False,
-                   y=None):
+                   return_alignment=False):
         """
         Constructs the computational graph of this layer.
 
@@ -729,8 +721,6 @@ class RecurrentLayerWithSearchAndLM(Layer):
         A_cp = self.A_cp
         B_hp = self.B_hp
         D_pe = self.D_pe
-
-        lm = self.language_model
 
         # The code works only with 3D tensors
         cndim = c.ndim
@@ -806,12 +796,10 @@ class RecurrentLayerWithSearchAndLM(Layer):
 
         # Feed previous label to the language model and  
         # obtain its hidden representation 
-        #TODO: add LM forward graph here - orhanf
-        hl = self.language_model.sample_fn()
-        
-        h = ht
-        
-        results = [h, ctx]
+        lm_next_state = self.lm_wrapper.ht_sampler()
+        hl = lm_next_state(y,lm_state_before)
+        hl = lm_state_before
+        results = [ht, hl, ctx]
         if return_alignment:
             results += [probs]
         return results
@@ -858,29 +846,34 @@ class RecurrentLayerWithSearchAndLM(Layer):
             else:
                 init_state = TT.alloc(floatX(0), self.n_hids)
         
+        if not isinstance(batch_size, int) or batch_size != 1:
+            init_state_lm = TT.alloc(floatX(0), batch_size, self.lm_wrapper.n_hids)
+        else:
+            init_state_lm = TT.alloc(floatX(0), self.lm_wrapper.n_hids)
+        
         p_from_c =  utils.dot(c, self.A_cp).reshape(
                 (c.shape[0], c.shape[1], self.n_hids))
 
         if mask:
-            sequences = [state_below, mask, updater_below, reseter_below]
+            sequences = [state_below, mask, updater_below, reseter_below, y]
             non_sequences = [c, c_mask, p_from_c]
-            #              seqs       | out |  non_seqs
-            fn = lambda x, m, g, r, y,   h,   c1, cm, pc : self.step_fprop(x, h, mask=m,
+            #              seqs        |   out   |  non_seqs
+            fn = lambda x, m, g, r, y,   h, h_lm,  c1, cm, pc : self.step_fprop(x, h, h_lm, mask=m,
                     gater_below=g, reseter_below=r, y=y,
                     c=c1, p_from_c=pc, c_mask=cm,
                     use_noise=use_noise, no_noise_bias=no_noise_bias,
                     return_alignment=return_alignment)
         else:
-            sequences = [state_below, updater_below, reseter_below]
+            sequences = [state_below, updater_below, reseter_below, y]
             non_sequences = [c, p_from_c]
-            #            seqs   | out | non_seqs
-            fn = lambda x, g, r,   h,    c1, pc : self.step_fprop(x, h,
-                    gater_below=g, reseter_below=r,
+            #              seqs    | out | non_seqs
+            fn = lambda x, g, r, y,   h,    c1, pc : self.step_fprop(x, h,
+                    gater_below=g, reseter_below=r, y=y,
                     c=c1, p_from_c=pc,
                     use_noise=use_noise, no_noise_bias=no_noise_bias,
                     return_alignment=return_alignment)
 
-        outputs_info = [init_state, None]
+        outputs_info = [init_state, init_state_lm, None]
         if return_alignment:
             outputs_info.append(None)
 
@@ -897,14 +890,6 @@ class RecurrentLayerWithSearchAndLM(Layer):
 
         return self.out
     
-    def state_from_file(self, filename):
-        '''
-        load state pickle file into state dictionary
-        '''
-        #TODO: do this properly - orhanf
-        import cPickle
-        return cPickle.load(open(filename, "rb"))
-
 class ReplicateLayer(Layer):
 
     def __init__(self, n_times):
@@ -1504,7 +1489,7 @@ class Decoder(EncoderDecoderBase):
                 add_kwargs['c_mask'] = c_mask
                 add_kwargs['return_alignment'] = self.compute_alignment
                 #TODO: Check if working. - orhanf
-                if self.state['use_external_lm']:
+                if 'use_external_lm' in  self.state and self.state['use_external_lm']:
                     add_kwargs['y'] = y
                 if mode != Decoder.EVALUATION:
                     add_kwargs['step_num'] = step_num
@@ -1526,7 +1511,7 @@ class Decoder(EncoderDecoderBase):
                 else:
                     #This implicitly wraps each element of result.out with a Layer to keep track of the parameters.
                     #It is equivalent to h=result[0], ctx=result[1]
-                    h, ctx = result
+                    h, h_lm, ctx = result
             else:
                 h = result
                 if mode == Decoder.EVALUATION:
