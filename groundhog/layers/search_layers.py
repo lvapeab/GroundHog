@@ -282,7 +282,6 @@ class RecurrentLayerWithSearch(Layer):
                 mask = mask.dimshuffle(0,'x')
             h = mask * h + (1-mask) * state_before
 
-        results = [h, ctx]
         if return_alignment:
             results += [probs]
         return results
@@ -645,9 +644,9 @@ class RecurrentLayerWithSearchAndLM(Layer):
 
         # Feed previous label to the language model and
         # obtain its hidden representation
-        lm_next_state = self.lm_wrapper.ht_sampler()
-        hl = lm_next_state(y,lm_state_before)
-        hl = lm_state_before
+        next_lm = self.lm_wrapper.ht_sampler()
+        hl = next_lm(y,lm_state_before)
+
         results = [ht, hl, ctx]
         if return_alignment:
             results += [probs]

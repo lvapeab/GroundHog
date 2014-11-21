@@ -296,13 +296,13 @@ class EncoderDecoderBase(object):
             add_args = dict(c_dim=self.state['c_dim'],
                             deep_attention=self.state['deep_attention'],
                             deep_attention_n_hids=self.state['deep_attention_n_hids'],
-                            deep_attention_acts= copy.deepcopy(self.state['deep_attention_acts']) 
-                                                    if isinstance(self.state['deep_attention_acts'], list) else 
+                            deep_attention_acts= copy.deepcopy(self.state['deep_attention_acts'])
+                                                    if isinstance(self.state['deep_attention_acts'], list) else
                                                     self.state['deep_attention_acts'])
         #TODO: Check correctness - orhanf
         if rec_layer == RecurrentLayerWithSearchAndLM:
-            add_args.update(external_lm = self.state['external_lm'])
-                             
+            add_args.update(external_lm=self.state['external_lm'])
+
         for level in range(self.num_levels):
             self.transitions.append(rec_layer(
                     self.rng,
@@ -484,6 +484,7 @@ class Decoder(EncoderDecoderBase):
         # we don't make difference between number of input layers
         # and outputs layers.
         self.num_levels = self.state['decoder_stack']
+        self._print_shape = theano.printing.Print('!!! Shape is :',['shape'])
 
         if 'dim_mult' not in self.state:
             self.state['dim_mult'] = 1.
@@ -586,7 +587,7 @@ class Decoder(EncoderDecoderBase):
         for level in range(self.num_levels):
             self.hidden_readouts[level] = MultiLayer(
                 self.rng,
-                n_in=self.state['dim'],
+                n_in=self.state['dim'] + 1000,
                 name='{}_hid_readout_{}'.format(self.prefix, level),
                 **readout_kwargs)
 
@@ -737,7 +738,7 @@ class Decoder(EncoderDecoderBase):
         # Shapes if mode != evaluation:
         #  (n_samples, dim)
         hidden_layers = []
-        lm_layers = []
+        hidden_layers_lm = []
         contexts = []
         # Default value for alignment must be smth computable
         alignment = TT.zeros((1,))
@@ -772,24 +773,24 @@ class Decoder(EncoderDecoderBase):
                 if self.compute_alignment:
                     #This implicitly wraps each element of result.out with a Layer to keep track of the parameters.
                     #It is equivalent to h=result[0], ctx=result[1] etc.
-                    h_tm, ctx, alignment = result
+                    h, ctx, alignment = result
                     if mode == Decoder.EVALUATION:
                         alignment = alignment.out
                 else:
                     #This implicitly wraps each element of result.out with a Layer to keep track of the parameters.
                     #It is equivalent to h=result[0], ctx=result[1]
                     if 'use_external_lm' in self.state and self.state['use_external_lm']:
-                        h_tm, h_lm, ctx = result
-                        lm_layers.append(h_lm)
+                        h, h_lm, ctx = result
+                        hidden_layers_lm.append(h_lm)
                     else:
-                        h_tm, ctx = result
+                        h, ctx = result
             else:
-                h_tm = result
+                h = result
                 if mode == Decoder.EVALUATION:
                     ctx = c
                 else:
                     ctx = ReplicateLayer(given_init_states[0].shape[0])(c[c_pos]).out
-            hidden_layers.append(h_tm)
+            hidden_layers.append(h)
             contexts.append(ctx)
 
         # In hidden_layers we do no have the initial state, but we need it.
