@@ -11,7 +11,8 @@ from state import\
     prototype_search_state_with_LM
     
 from language_model import\
-    LM_builder
+    LM_builder, \
+    LM_wrapper
 
 from state_lm import\
     prototype_lm_state

@@ -9,7 +9,8 @@ from rec_layers import  \
 from rconv_layers import RecursiveConvolutionalLayer
 from ff_layers import DropOp
 from ff_layers import MultiLayer, LastState,  UnaryOp,\
-        MaxPooling, Shift, BinaryOp, GaussianNoise, Concatenate
+        MaxPooling, Shift, BinaryOp, GaussianNoise, Concatenate, \
+        ReplicateLayer, PadLayer, ZeroLayer
 from ff_layers import maxpool, maxpool_ntimes, minpool, minpool_ntimes, \
         last, last_ntimes, \
         tanh, sigmoid, rectifier, hard_sigmoid, hard_tanh
@@ -17,4 +18,6 @@ from ff_layers import maxpool, maxpool_ntimes, minpool, minpool_ntimes, \
 from cost_layers import SoftmaxLayer, SigmoidLayer, HierarchicalSoftmaxLayer
 from basic import Layer, Operator
 
-from search_layers import LM_wrapper
+from search_layers import \
+        RecurrentLayerWithSearch, \
+        RecurrentLayerWithSearchAndLM

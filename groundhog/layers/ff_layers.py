@@ -509,3 +509,38 @@ class Concatenate(Layer):
     def fprop(self, *args):
         self.out = TT.concatenate(args, axis=self.axis)
         return self.out
+
+class ReplicateLayer(Layer):
+
+    def __init__(self, n_times):
+        self.n_times = n_times
+        super(ReplicateLayer, self).__init__(0, 0, None)
+
+    def fprop(self, x):
+        # This is black magic based on broadcasting,
+        # that's why variable names don't make any sense.
+        a = TT.shape_padleft(x)
+        padding = [1] * x.ndim
+        b = TT.alloc(numpy.float32(1), self.n_times, *padding)
+        self.out = a * b
+        return self.out
+    
+class PadLayer(Layer):
+
+    def __init__(self, required):
+        self.required = required
+        Layer.__init__(self, 0, 0, None)
+
+    def fprop(self, x):
+        if_longer = x[:self.required]
+        padding = ReplicateLayer(TT.max([1, self.required - x.shape[0]]))(x[-1]).out
+        if_shorter = TT.concatenate([x, padding])
+        diff = x.shape[0] - self.required
+        self.out = ifelse(diff < 0, if_shorter, if_longer)
+        return self.out
+
+class ZeroLayer(Layer):
+
+    def fprop(self, x):
+        self.out = TT.zeros(x.shape)
+        return self.out    

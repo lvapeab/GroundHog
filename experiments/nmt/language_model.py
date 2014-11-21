@@ -36,7 +36,7 @@ from groundhog.layers import\
         LastState,\
         DropOp,\
         Concatenate
-        
+
 logger = logging.getLogger(__name__)
 
 def none_if_zero(x):
@@ -412,6 +412,50 @@ class LM_builder(object):
             return ht
  
         return ht_sampler_fn
+
+
+class LM_wrapper(LM_Model):
+    
+    def __init__(self, 
+                 lm_type,
+                 state_file,
+                 model_file,
+                 rng):
+        logger.debug("Employ external Language Model")
+        
+        # this must initialize language model and create its layers
+        self.lm = eval(lm_type)(self.state_from_file(state_file), rng)
+        self.n_hids = self.lm.get_n_hids()
+        
+        # this must build computational graph of language model
+        self.lm.build()
+        
+        super(LM_wrapper,self).__init__(cost_layer = self.lm.train_model,
+                                        sample_fn = self.lm.get_sampler(),
+                                        valid_fn = None,
+                                        noise_fn = None,
+                                        weight_noise_amount = self.lm.state['weight_noise_amount'],
+                                        indx_word=self.lm.state['indx_word'],
+                                        indx_word_src=None,
+                                        exclude_params_for_norm=None,
+                                        rng = rng)
+        # load language model, 
+        self.load(model_file)
+    
+    def state_from_file(self, filename):
+        '''
+        load state pickle file into state dictionary
+        '''
+        return cPickle.load(open(filename, "rb"))
+    
+    def single_step_sampler(self):
+        return self.lm.get_ss_sampler()
+
+    def get_sampler(self):
+        return self.lm.get_sampler()
+    
+    def ht_sampler(self):
+        return self.lm.get_ht_sampler()
         
         
 if __name__ == '__main__':
