@@ -40,6 +40,8 @@ class LM_Model(Model):
                   indx_word_src=None,
                   character_level = False,
                   exclude_params_for_norm=None,
+                  exclude_params=None,
+                  not_save_params=[],
                   rng = None):
         """
         Constructs a model, that respects the interface required by the
@@ -102,11 +104,16 @@ class LM_Model(Model):
                                        sample_fn=sample_fn,
                                        indx_word=indx_word,
                                        indx_word_src=indx_word_src,
+                                       not_save_params=not_save_params,
                                        rng=rng)
         if exclude_params_for_norm is None:
             self.exclude_params_for_norm = []
         else:
             self.exclude_params_for_norm = exclude_params_for_norm
+        if exclude_params is None:
+            self.exclude_params = []
+        else:
+            self.exclude_params = exclude_params
         self.need_inputs_for_generating_noise=need_inputs_for_generating_noise
         self.cost_layer = cost_layer
         self.validate_step = valid_fn
@@ -213,7 +220,7 @@ class LM_Model(Model):
         return [('cost',entropy), ('ppl',ppl)]
 
 
-    def load_dict(self, opts):
+    def load_dict(self):
         """
         Loading the dictionary that goes from indices to actual words
         """
@@ -221,16 +228,16 @@ class LM_Model(Model):
         if self.indx_word and '.pkl' in self.indx_word[-4:]:
             data_dict = pkl.load(open(self.indx_word, "r"))
             self.word_indxs = data_dict
-            self.word_indxs[opts['null_sym_target']] = '<eol>'
-            self.word_indxs[opts['unk_sym_target']] = opts['oov']
+            self.word_indxs[len(self.word_indxs.items())] = '<eol>'
+            self.word_indxs[len(self.word_indxs.items())] = '<oov>'
         elif self.indx_word and '.np' in self.indx_word[-4:]:
             self.word_indxs = numpy.load(self.indx_word)['unique_words']
 
         if self.indx_word_src and '.pkl' in self.indx_word_src[-4:]:
             data_dict = pkl.load(open(self.indx_word_src, "r"))
             self.word_indxs_src = data_dict
-            self.word_indxs_src[opts['null_sym_source']] = '<eol>'
-            self.word_indxs_src[opts['unk_sym_source']] = opts['oov']
+            self.word_indxs_src[len(self.word_indxs_src.items())] = '<eol>'
+            self.word_indxs_src[len(self.word_indxs_src.items())] = '<oov>'
         elif self.indx_word_src and '.np' in self.indx_word_src[-4:]:
             self.word_indxs_src = numpy.load(self.indx_word_src)['unique_words']
 

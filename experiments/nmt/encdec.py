@@ -587,9 +587,19 @@ class Decoder(EncoderDecoderBase):
         for level in range(self.num_levels):
             self.hidden_readouts[level] = MultiLayer(
                 self.rng,
-                n_in=self.state['dim'] + 1000,
+                n_in=self.state['dim'],
                 name='{}_hid_readout_{}'.format(self.prefix, level),
                 **readout_kwargs)
+            
+        self.hidden_lm_readouts = [None] * self.num_levels
+        for level in range(self.num_levels):
+            self.hidden_lm_readouts[level] = MultiLayer(
+                self.rng,
+                n_in=1000,
+                n_hids=1000,
+                activation='lambda x: x',
+                name='{}_hid_lm_readout_{}'.format(self.prefix, level),
+                **self.default_kwargs)
 
         self.prev_word_readout = 0
         if self.state['bigram']:
@@ -814,6 +824,7 @@ class Decoder(EncoderDecoderBase):
                 read_from = init_states[level]
             else:
                 read_from = hidden_layers[level]
+                read_from_lm = hidden_layers_lm[level]
             read_from_var = read_from if type(read_from) == theano.tensor.TensorVariable else read_from.out
             if read_from_var.ndim == 3:
                 read_from_var = read_from_var[:,:,:self.state['dim']]
@@ -824,6 +835,7 @@ class Decoder(EncoderDecoderBase):
             else:
                 read_from = read_from_var
             readout += self.hidden_readouts[level](read_from)
+            readout += self.hidden_lm_readouts[level](read_from_lm)
         if self.state['bigram']:
             if mode != Decoder.EVALUATION:
                 check_first_word = (y > 0
