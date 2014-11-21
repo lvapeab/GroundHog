@@ -366,147 +366,42 @@ class RecurrentLayerWithSearch(Layer):
 
         return self.out
 
-class RecurrentLayerWithSearchAndLM(Layer):
-    """A copy of RecurrentLayer from groundhog"""
+class RecurrentLayerWithSearchAndLM(RecurrentLayerWithSearch):
+    """Inherits from RecurrentLayerWithSearch class"""
 
-    def __init__(self, rng,
-                 n_hids,
-                 c_dim=None,
-                 scale=.01,
-                 activation=TT.tanh,
-                 bias_fn='init_bias',
-                 bias_scale=0.,
-                 init_fn='sample_weights',
-                 gating=False,
-                 reseting=False,
-                 dropout=1.,
-                 gater_activation=TT.nnet.sigmoid,
-                 reseter_activation=TT.nnet.sigmoid,
-                 weight_noise=False,
-                 deep_attention=None,
-                 deep_attention_n_hids=None,
-                 deep_attention_acts=None,
+    def __init__(self,rng,
                  external_lm=None,
-                 name=None):
+                 *args, 
+                 **kwargs):
         logger.debug("RecurrentLayerWithSearchAndLM is used")
 
-        self.grad_scale = 1
-        assert gating == True
-        assert reseting == True
-        assert dropout == 1.
-        assert weight_noise == False
+        # check if external lm parameter dict is in appropriate format
         assert type(external_lm) is dict and all([el in external_lm
                                                   for el in {'lm_state_file',
                                                              'lm_model_file',
                                                              'lm_type'}])
-        assert rng is not None, "random number generator should not be empty!"
 
-        updater_activation = gater_activation
-
-        if type(init_fn) is str or type(init_fn) is unicode:
-            init_fn = eval(init_fn)
-        if type(bias_fn) is str or type(bias_fn) is unicode:
-            bias_fn = eval(bias_fn)
-        if type(activation) is str or type(activation) is unicode:
-            activation = eval(activation)
-        if type(updater_activation) is str or type(updater_activation) is unicode:
-            updater_activation = eval(updater_activation)
-        if type(reseter_activation) is str or type(reseter_activation) is unicode:
-            reseter_activation = eval(reseter_activation)
-
-        self.scale = scale
-        self.activation = activation
-        self.n_hids = n_hids
-        self.bias_scale = bias_scale
-        self.bias_fn = bias_fn
-        self.init_fn = init_fn
-        self.updater_activation = updater_activation
-        self.reseter_activation = reseter_activation
-        self.c_dim = c_dim
-        self.deep_attention = deep_attention
-        self.deep_attention_n_hids = deep_attention_n_hids
-        self.deep_attention_acts = deep_attention_acts
+        # initialize actual recurrent layer with search
+        super(RecurrentLayerWithSearchAndLM, self).__init__(rng,
+                                                            *args,
+                                                            **kwargs)
 
         # this initializes language model and loads model from file
         self.lm_wrapper = LM_wrapper(lm_type=external_lm['lm_type'],
                                      state_file=external_lm['lm_state_file'],
                                      model_file=external_lm['lm_model_file'],
                                      rng=rng)
-
-        super(RecurrentLayerWithSearchAndLM, self).__init__(self.n_hids,
-                self.n_hids, rng, name)
-
-        self.params = []
-        self._init_params()
+        
+        # merge parameters with recurrent layer parameter list
         self.merge_params(self.lm_wrapper)
+        
+        # exclude output layer parameters since they are not part of 
+        # the computational graph (for now at least)
+        #TODO: make it generic to handle output layer params
         for el in self.lm_wrapper.lm.output_layer.params:
             idx = self.params.index(el)
             del self.params[idx]
             del self.params_grad_scale[idx]
-
-    def _init_params(self):
-        self.W_hh = theano.shared(
-                self.init_fn(self.n_hids,
-                self.n_hids,
-                -1,
-                self.scale,
-                rng=self.rng),
-                name="W_%s"%self.name)
-        self.params = [self.W_hh]
-        self.G_hh = theano.shared(
-                self.init_fn(self.n_hids,
-                    self.n_hids,
-                    -1,
-                    self.scale,
-                    rng=self.rng),
-                name="G_%s"%self.name)
-        self.params.append(self.G_hh)
-        self.R_hh = theano.shared(
-                self.init_fn(self.n_hids,
-                    self.n_hids,
-                    -1,
-                    self.scale,
-                    rng=self.rng),
-                name="R_%s"%self.name)
-        self.params.append(self.R_hh)
-        self.A_cp = theano.shared(
-                sample_weights_classic(self.c_dim,
-                    self.n_hids,
-                    -1,
-                    10 ** (-3),
-                    rng=self.rng),
-                name="A_%s"%self.name)
-        self.params.append(self.A_cp)
-        self.B_hp = theano.shared(
-                sample_weights_classic(self.n_hids,
-                    self.n_hids,
-                    -1,
-                    10 ** (-3),
-                    rng=self.rng),
-                name="B_%s"%self.name)
-        self.params.append(self.B_hp)
-        self.D_pe = theano.shared(
-                numpy.zeros((self.n_hids, 1), dtype="float32"),
-                name="D_%s"%self.name)
-        self.params.append(self.D_pe)
-
-        # initialize deep attention model
-        if self.deep_attention:
-            self.DatN = MultiLayer(rng=self.rng,
-                                   n_in=self.n_hid,
-                                   n_hids=self.deep_attention_n_hids,
-                                   activation=self.deep_attention_acts,
-                                   name="DatN_%s"%self.name)
-            [self.params.append(param) for param in self.DatN.params]
-        self.params_grad_scale = [self.grad_scale for x in self.params]
-
-    def set_decoding_layers(self, c_inputer, c_reseter, c_updater):
-        self.c_inputer = c_inputer
-        self.c_reseter = c_reseter
-        self.c_updater = c_updater
-        for layer in [c_inputer, c_reseter, c_updater]:
-            self.params += layer.params
-            self.params_grad_scale += layer.params_grad_scale
 
     def step_fprop(self,
                    state_below,

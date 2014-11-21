@@ -430,6 +430,7 @@ class LM_wrapper(LM_Model):
         # this must build computational graph of language model
         self.lm.build()
         
+        #TODO: fix exclusion parameters
         super(LM_wrapper,self).__init__(cost_layer = self.lm.train_model,
                                         sample_fn = self.lm.get_sampler(),
                                         valid_fn = None,
@@ -438,6 +439,8 @@ class LM_wrapper(LM_Model):
                                         indx_word=self.lm.state['indx_word'],
                                         indx_word_src=None,
                                         exclude_params_for_norm=None,
+                                        exclude_params=None,
+                                        not_save_params=None,
                                         rng = rng)
         # load language model, 
         self.load(model_file)

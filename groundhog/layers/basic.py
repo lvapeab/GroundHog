@@ -498,6 +498,7 @@ class Model(Container):
                  sample_fn,
                  indx_word="/data/lisa/data/PennTreebankCorpus/dictionaries.npz",
                  indx_word_src=None,
+                 not_save_params=[],
                  rng =None):
         super(Model, self).__init__()
         if rng == None:
@@ -522,7 +523,8 @@ class Model(Container):
         self.output_layer = output_layer
         self.properties = output_layer.properties
         self._get_samples = output_layer._get_samples
-
+        self.not_save_params = not_save_params
+        
     def get_schedules(self):
         return self.schedules
 
