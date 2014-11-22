@@ -824,7 +824,8 @@ class Decoder(EncoderDecoderBase):
                 read_from = init_states[level]
             else:
                 read_from = hidden_layers[level]
-                read_from_lm = hidden_layers_lm[level]
+                if 'use_external_lm' in self.state and self.state['use_external_lm']:
+                    read_from_lm = hidden_layers_lm[level]
             read_from_var = read_from if type(read_from) == theano.tensor.TensorVariable else read_from.out
             if read_from_var.ndim == 3:
                 read_from_var = read_from_var[:,:,:self.state['dim']]
@@ -835,7 +836,8 @@ class Decoder(EncoderDecoderBase):
             else:
                 read_from = read_from_var
             readout += self.hidden_readouts[level](read_from)
-            readout += self.hidden_lm_readouts[level](read_from_lm)
+            if 'use_external_lm' in self.state and self.state['use_external_lm']:
+                readout += self.hidden_lm_readouts[level](read_from_lm)
         if self.state['bigram']:
             if mode != Decoder.EVALUATION:
                 check_first_word = (y > 0
