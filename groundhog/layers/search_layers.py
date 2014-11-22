@@ -391,9 +391,9 @@ class RecurrentLayerWithSearchAndLM(RecurrentLayerWithSearch):
                                      state_file=external_lm['lm_state_file'],
                                      model_file=external_lm['lm_model_file'],
                                      rng=rng)
-        
+        """
         # merge parameters with recurrent layer parameter list
-        self.merge_params(self.lm_wrapper)
+        # self.merge_params(self.lm_wrapper)
         
         # exclude output layer parameters since they are not part of 
         # the computational graph (for now at least)
@@ -402,6 +402,7 @@ class RecurrentLayerWithSearchAndLM(RecurrentLayerWithSearch):
             idx = self.params.index(el)
             del self.params[idx]
             del self.params_grad_scale[idx]
+        """
 
     def step_fprop(self,
                    state_below,

@@ -312,7 +312,7 @@ def prototype_search_state():
     state['backward'] = True
     state['seqlen'] = 50
     state['sort_k_batches'] = 20
-    state['prefix'] = 'deepAttentionTst_'
+    state['prefix'] = 'deepAttention2_'
 
     return state
 

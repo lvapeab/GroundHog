@@ -35,7 +35,8 @@ from groundhog.layers import\
         Shift,\
         LastState,\
         DropOp,\
-        Concatenate
+        Concatenate, \
+        Container
 
 logger = logging.getLogger(__name__)
 
@@ -46,22 +47,17 @@ def none_if_zero(x):
 
 def create_padded_batch(state, x, y, return_dict=False):
     """A callback given to the iterator to transform data in suitable format
-
     :type x: list
     :param x: list of numpy.array's, each array is a batch of phrases
         in some of source languages
-
     :type y: list
     :param y: same as x but for target languages
-
     :param new_format: a wrapper to be applied on top of returned value
-
     :returns: a tuple (X, Xmask, Y, Ymask) where
         - X is a matrix, each column contains a source sequence
         - Xmask is 0-1 matrix, each column marks the sequence positions in X
         - Y and Ymask are matrices of the same format for target sequences
         OR new_format applied to the tuple
-
     Notes:
     * actually works only with x[0] and y[0]
     * len(x[0]) thus is just the minibatch size
@@ -153,16 +149,13 @@ def get_batch_iterator(state):
     the standard python iterator protocol, it has options to
     allow for infinite looping for a training set, or finite
     looping for a validation set
-
     The Iterator class defined inheriets from a PytablesBitextIterator
     or some variant, which manages the PytablesBitextFetcher class
     which iterfaces with the HDF5 file, using another thread to
     reduce computations spent shuttling from the disc
-
     The Iterator object at one time only loads in k_batches into memory,
     then proprocesses the batch by adding masks to the data before 
     returning. 
-
     Kelvin Xu
     """
     class Iterator(PytablesBitextIterator_UL):
@@ -220,12 +213,14 @@ def get_batch_iterator(state):
     return data
 
 class LM_builder(object):
+    """
+    Object that encapsulates the languages model
+    """
 
-    def __init__(self, state, rng):
-        logger.debug("Using LM_builder as auxiliary language model")
+    def __init__(self, state, rng, skip_init=False):
         self.state = state
         self.rng = rng
-        self.skip_init = True if self.state['reload'] else False
+        self.skip_init = skip_init 
 
         self.default_kwargs = dict(
             init_fn=self.state['weight_init_fn'] if not self.skip_init else "sample_zeros",
@@ -234,8 +229,8 @@ class LM_builder(object):
 
         self.__create_layers__()
 
-    def __create_layers__(self):
-        logger.debug("_create_layers")
+    def __create_layers__(self, build_output=True):
+        
         self.emb_words = MultiLayer(
             self.rng,
             n_in=self.state['n_sym'],
@@ -280,39 +275,103 @@ class LM_builder(object):
                 self.rng,
                 name='updater',
                 **gate_kwargs)
+        
+        if build_output:
+            self.output_layer = SoftmaxLayer(
+                self.rng,
+                self.state['dim'],
+                self.state['n_sym'],
+                self.state['out_scale'],
+                self.state['out_sparse'],
+                init_fn="sample_weights_classic",
+                weight_noise=self.state['weight_noise'],
+                sum_over_time=True,
+                name='lm_out')
 
-        self.output_layer = SoftmaxLayer(
-            self.rng,
-            self.state['dim'],
-            self.state['n_sym'],
-            self.state['out_scale'],
-            self.state['out_sparse'],
-            init_fn="sample_weights_classic",
-            weight_noise=self.state['weight_noise'],
-            sum_over_time=True,
-            name='lm_out')
-
+    def build_for_translation(self, target, target_mask=None, prev_hid=None):
         """
-        # this is currently not used
-        self.shortcut = MultiLayer(
-            rng,
-            n_in=self.state['n_in'],
-            n_hids=eval(self.state['inpout_nhids']),
-            activations=eval(self.state['inpout_activ']),
-            init_fn='sample_weights_classic',
-            weight_noise = self.state['weight_noise'],
-            scale=eval(self.state['inpout_scale']),
-            sparsity=eval(self.state['inpout_sparse']),
-            learn_bias=eval(self.state['inpout_learn_bias']),
-            bias_scale=eval(self.state['inpout_bias']),
-            name='lm_shortcut')
+        This function builds the language model for the machine translation
+        system, naturally it requires the target, and target_mask
+        
+        In the sampling step, we have no target_mask
         """
+        # this assertion doesn't really make sense
+        assert target.ndim == 3
 
-    def build(self):
+        n_samples = self.target.shape[1]
+
+        x_emb = self.emb_words(self.target, no_noise_bias=self.state['no_noise_bias'])
+
+        input_signals = self.inputer(x_emb) 
+        update_signals = self.updater(x_emb)
+        reset_signals = self.reseter(x_emb) 
+
+        # if we are doing sampling, we expect a prev_hid state but no target mask,
+
+        self.rec_layer = self.rec(input_signals, mask=target_mask, 
+                    state_before=prev_hid,
+                    no_noise_bias=self.state['no_noise_bias'],
+                    batch_size=n_samples,
+                    one_step= True if (prev_hid is not None) and
+                              (target_mask is None) else False,
+                    gater_below=none_if_zero(update_signals),
+                    reseter_below=none_if_zero(reset_signals))
+        
+        return self.rec_layer
+
+    def get_const_params(self):
+        """
+        This function grabs the params and params_grad_scales
+        to be excluded from gradient calculation
+        """
+        const_params = []
+        # embedding of language model
+        const_params += self.emb_words.params
+        # Gating units
+        const_params += self.inputer.params
+        const_params += self.updater.params
+        const_params += self.reseter.params
+        # Recurrent units
+        const_params += self.rec.params
+        
+        return const_params 
+
+    def get_const_params_grad_scale(self):
+        """
+        This function grabs the params and params_grad_scales
+        to be excluded from gradient calculation
+        """
+        const_params_gs = []
+        
+        # embedding of language model
+        const_params_gs += self.emb_words.params_grad_scale
+        # Gating units
+        const_params_gs += self.inputer.params_grad_scale
+        const_params_gs += self.updater.params_grad_scale
+        const_params_gs += self.reseter.params_grad_scale
+        # Recurrent units
+        const_params_gs += self.rec.params_grad_scale
+        
+        return const_params_gs
+    
+    def get_output_const_params(self):
+        """
+        This function grabs the params of the output_layer 
+        """
+        const_params = []
+        const_params += self.output_layer.params
+        
+        return const_params
+
+    # TODO build sampler for translation
+    
+    def get_sampler_translation(self):
+        pass
+
+    def build(self, build_output=True):
         """
         Build Computational Graph
         """
-        logger.debug("_build computational graph")
         self.x = TT.lmatrix('x')
         self.x_mask = TT.matrix('x_mask')
         self.y = TT.lmatrix('y')
@@ -324,8 +383,8 @@ class LM_builder(object):
 
         # the demensions of this is (time*batch_id, embedding dim)
         # the whole input is flattened to support advanced indexing < -- should read this.  
-
         self.x_emb = self.emb_words(self.x, no_noise_bias=self.state['no_noise_bias'])
+
         x_input = self.inputer(self.x_emb) 
         update_signals = self.updater(self.x_emb)
         reset_signals = self.reseter(self.x_emb) 
@@ -344,6 +403,9 @@ class LM_builder(object):
         """
         Sampling         
         """
+    
+        # TODO change sampler so only return h0
+        
         def sample_fn(word_tm1, h_tm1):
             x_emb = self.emb_words(word_tm1, use_noise = False, one_step=True)  
             x_input = self.inputer(x_emb)
@@ -367,10 +429,9 @@ class LM_builder(object):
         ##### scan for iterating the single-step sampling multiple times
         [samples, summaries], updates = scan_sandbox(sample_fn,
                           states = [
-                              TT.alloc(numpy.int64(self.state['sampling_seed']), 
-                                       self.state['sample_steps']),
-                              TT.alloc(numpy.float32(0), 1, self.state['dim'])],
-                          n_steps= self.state['sample_steps'],
+                              TT.alloc(numpy.int64(state['sampling_seed']), state['sample_steps']),
+                              TT.alloc(numpy.float32(0), 1, state['dim'])],
+                          n_steps= state['sample_steps'],
                           name='sampler_scan')
 
         ##### define a Theano function
@@ -380,26 +441,15 @@ class LM_builder(object):
         return sample_fn
     
     def get_n_hids(self):
+        """
+        Get size of hidden state representation 
+        """
         return self.state['dim']
     
-    def get_ss_sampler(self):
-
-        def ss_sample_fn(word_tm1, h_tm1):
-            x_emb = self.emb_words(word_tm1, use_noise = False, one_step=True)  
-            x_input = self.inputer(x_emb)
-            update_signal = self.updater(x_emb)
-            reset_signal = self.reseter(x_emb)
-            h0 = self.rec(x_input, gater_below=update_signal,
-                          reseter_below=reset_signal,
-                          state_before=h_tm1, 
-                          one_step=True, use_noise=False)
-            word = self.output_layer.get_sample(state_below=h0)
-            return word, h0
-        
-        return ss_sample_fn
-    
     def get_ht_sampler(self):
-        
+        """
+        Sampler only returning the hidden state
+        """
         def ht_sampler_fn(word_tm1,h_tm1):
             x_emb = self.emb_words(word_tm1, use_noise = False, one_step=True)  
             x_input = self.inputer(x_emb)
@@ -414,7 +464,7 @@ class LM_builder(object):
         return ht_sampler_fn
 
 
-class LM_wrapper(LM_Model):
+class LM_wrapper(Container):
     
     def __init__(self, 
                  lm_type,
@@ -423,6 +473,8 @@ class LM_wrapper(LM_Model):
                  rng):
         logger.debug("Employ external Language Model")
         
+        super(LM_wrapper, self).__init__()
+        
         # this must initialize language model and create its layers
         self.lm = eval(lm_type)(self.state_from_file(state_file), rng)
         self.n_hids = self.lm.get_n_hids()
@@ -430,19 +482,12 @@ class LM_wrapper(LM_Model):
         # this must build computational graph of language model
         self.lm.build()
         
-        #TODO: fix exclusion parameters
-        super(LM_wrapper,self).__init__(cost_layer = self.lm.train_model,
-                                        sample_fn = self.lm.get_sampler(),
-                                        valid_fn = None,
-                                        noise_fn = None,
-                                        weight_noise_amount = self.lm.state['weight_noise_amount'],
-                                        indx_word=self.lm.state['indx_word'],
-                                        indx_word_src=None,
-                                        exclude_params_for_norm=None,
-                                        exclude_params=None,
-                                        not_save_params=None,
-                                        rng = rng)
-        # load language model, 
+        # get the params list, load needs their names
+        self.params += self.lm.get_const_params()
+        self.params_grad_scale += self.lm.get_const_params_grad_scale()
+        self.params += self.lm.get_output_const_params()
+        
+        # load language model
         self.load(model_file)
     
     def state_from_file(self, filename):
@@ -450,10 +495,10 @@ class LM_wrapper(LM_Model):
         load state pickle file into state dictionary
         '''
         return cPickle.load(open(filename, "rb"))
-    
-    def single_step_sampler(self):
-        return self.lm.get_ss_sampler()
 
+    def get_params(self):
+        return self.lm.params
+    
     def get_sampler(self):
         return self.lm.get_sampler()
     
