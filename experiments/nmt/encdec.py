@@ -514,7 +514,8 @@ class Decoder(EncoderDecoderBase):
     def _create_initialization_layers(self):
         logger.debug("_create_initialization_layers")
         self.initializers = [ZeroLayer()] * self.num_levels
-        self.initializers_lm = [ZeroLayer()] * self.num_levels
+        if 'use_external_lm' in self.state and self.state['use_external_lm']:
+            self.initializers_lm = [ZeroLayer()] * self.num_levels
         if self.state['bias_code']:
             for level in range(self.num_levels):
                 self.initializers[level] = MultiLayer(
@@ -590,16 +591,17 @@ class Decoder(EncoderDecoderBase):
                 n_in=self.state['dim'],
                 name='{}_hid_readout_{}'.format(self.prefix, level),
                 **readout_kwargs)
-            
-        self.hidden_lm_readouts = [None] * self.num_levels
-        for level in range(self.num_levels):
-            self.hidden_lm_readouts[level] = MultiLayer(
-                self.rng,
-                n_in=1000,
-                n_hids=1000,
-                activation='lambda x: x',
-                name='{}_hid_lm_readout_{}'.format(self.prefix, level),
-                **self.default_kwargs)
+
+        if 'use_external_lm' in self.state and self.state['use_external_lm']:
+            self.hidden_lm_readouts = [None] * self.num_levels
+            for level in range(self.num_levels):
+                self.hidden_lm_readouts[level] = MultiLayer(
+                    self.rng,
+                    n_in=1000,
+                    n_hids=1000,
+                    activation='lambda x: x',
+                    name='{}_hid_lm_readout_{}'.format(self.prefix, level),
+                    **self.default_kwargs)
 
         self.prev_word_readout = 0
         if self.state['bigram']:
