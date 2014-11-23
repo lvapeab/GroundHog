@@ -158,11 +158,14 @@ class Container(object):
         self.additional_gradients += new_additional_gradients
         self.properties += new_properties
 
-    def save(self, filename):
+    def save(self, filename, not_save_params=[]):
         """
         Save the model to file `filename`
         """
-        vals = dict([(x.name, x.get_value()) for x in self.params])
+        vals = dict([(x.name, x.get_value()) for x in self.params 
+                        if x.name not in not_save_params])
+        if not vals:
+            logger.error("No parameters to save the model")
         numpy.savez(filename, **vals)
 
     def load(self, filename):
