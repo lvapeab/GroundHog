@@ -646,6 +646,7 @@ class Decoder(EncoderDecoderBase):
             step_num=None,
             mode=EVALUATION,
             given_init_states=None,
+            given_lm_init_states=None,
             T=1):
         """Create the computational graph of the RNN Decoder.
 
@@ -675,6 +676,9 @@ class Decoder(EncoderDecoderBase):
             for sampling and beam_search. A list of hidden states
                 matrices for each layer, each matrix is (n_samples, dim)
 
+        :param given_lm_init_states:
+            TODO: write me
+                
         :param T:
             sampling temperature
         """
@@ -744,6 +748,8 @@ class Decoder(EncoderDecoderBase):
                 init_c = c[0, :, -self.state['dim']:]
                 init_states.append(self.initializers[level](init_c))
 
+        lm_init_states = given_lm_init_states
+                
         # Hidden layers' states.
         # Shapes if mode == evaluation:
         #  (seq_len, batch_size, dim)
@@ -763,14 +769,18 @@ class Decoder(EncoderDecoderBase):
                         if mode != Decoder.EVALUATION
                         else dict(init_state=init_states[level],
                             batch_size=y.shape[1] if y.ndim == 2 else 1,
-                            nsteps=y.shape[0]))
+                            nsteps=y.shape[0]))            
             if self.state['search']:
                 add_kwargs['c'] = c
                 add_kwargs['c_mask'] = c_mask
                 add_kwargs['return_alignment'] = self.compute_alignment
-                #TODO: Check if working. - orhanf
+                
+                #TODO: This part definitely should be explained
                 if 'use_external_lm' in  self.state and self.state['use_external_lm']:
                     add_kwargs['y'] = y
+                    if mode != Decoder.EVALUATION:
+                        add_kwargs['lm_state_before']=lm_init_states[level]
+                        
                 if mode != Decoder.EVALUATION:
                     add_kwargs['step_num'] = step_num
             result = self.transitions[level](
@@ -824,6 +834,8 @@ class Decoder(EncoderDecoderBase):
         for level in range(self.num_levels):
             if mode != Decoder.EVALUATION:
                 read_from = init_states[level]
+                if 'use_external_lm' in self.state and self.state['use_external_lm']:
+                    read_from_lm = lm_init_states[level]
             else:
                 read_from = hidden_layers[level]
                 if 'use_external_lm' in self.state and self.state['use_external_lm']:
@@ -897,11 +909,11 @@ class Decoder(EncoderDecoderBase):
 
         args = iter(args)
 
-        # Arguments that correspond to scan's "sequences" parameteter:
+        # Arguments that correspond to scan's "sequences" parameter:
         step_num = next(args)
         assert step_num.ndim == 0
 
-        # Arguments that correspond to scan's "outputs" parameteter:
+        # Arguments that correspond to scan's "outputs" parameter:
         prev_word = next(args)
         assert prev_word.ndim == 1
         # skip the previous word log probability
@@ -909,17 +921,22 @@ class Decoder(EncoderDecoderBase):
         prev_hidden_states = [next(args) for k in range(self.num_levels)]
         assert prev_hidden_states[0].ndim == 2
 
+        if 'use_external_lm' in self.state and self.state['use_external_lm']:
+            prev_lm_states = [next(args) for k in range(self.num_levels)]
+            assert prev_lm_states[0].ndim == 2
+        
         # Arguments that correspond to scan's "non_sequences":
         c = next(args)
         assert c.ndim == 2
         T = next(args)
         assert T.ndim == 0
 
-        decoder_args = dict(given_init_states=prev_hidden_states, T=T, c=c)
+        decoder_args = dict(given_init_states=prev_hidden_states,\
+                            given_lm_init_states=prev_lm_states, T=T, c=c)
 
-        sample, log_prob = self.build_decoder(y=prev_word, step_num=step_num, mode=Decoder.SAMPLING, **decoder_args)[:2]
-        hidden_states = self.build_decoder(y=sample, step_num=step_num, mode=Decoder.SAMPLING, **decoder_args)[2:]
-        return [sample, log_prob] + hidden_states
+        sample, h_lm, log_prob = self.build_decoder(y=prev_word, step_num=step_num, mode=Decoder.SAMPLING, **decoder_args)[:3]
+        hidden_states = self.build_decoder(y=sample, step_num=step_num, mode=Decoder.SAMPLING, **decoder_args)[3:]
+        return [sample, h_lm, log_prob] + hidden_states
 
     def build_initializers(self, c):
         return [init(c).out for init in self.initializers]
@@ -927,6 +944,15 @@ class Decoder(EncoderDecoderBase):
     def build_sampler(self, n_samples, n_steps, T, c):
         states = [TT.zeros(shape=(n_samples,), dtype='int64'),
                 TT.zeros(shape=(n_samples,), dtype='float32')]
+        
+        if 'use_external_lm' in self.state and self.state['use_external_lm']:
+            floatX = numpy.float32 if theano.config.floatX=='float32' \
+                                    else numpy.float64
+            lm_dims = [self.transitions[i].lm_wrapper.n_hids 
+                        for i in xrange(self.num_levels)]
+            states += [ReplicateLayer(n_samples)(TT.alloc(floatX(0), lm_dims[i])).out 
+                        for i, init in enumerate(self.initializers_lm)]
+            
         init_c = c[0, -self.state['dim']:]
         states += [ReplicateLayer(n_samples)(init(init_c).out).out for init in self.initializers]
 
