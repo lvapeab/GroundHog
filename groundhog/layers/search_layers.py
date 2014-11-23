@@ -449,7 +449,6 @@ class RecurrentLayerWithSearchAndLM(RecurrentLayerWithSearch):
 
         :type y: theano variable
         :param y:
-            TODO: fix comment below
             if mode == evaluation
                 target sequences, matrix of word indices of shape (max_seq_len, batch_size),
                 where each column is a sequence

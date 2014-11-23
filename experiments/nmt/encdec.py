@@ -597,8 +597,8 @@ class Decoder(EncoderDecoderBase):
             for level in range(self.num_levels):
                 self.hidden_lm_readouts[level] = MultiLayer(
                     self.rng,
-                    n_in=1000,
-                    n_hids=1000,
+                    n_in=self.transitions[level].lm_wrapper.n_hids,
+                    n_hids=self.state['dim'],
                     activation='lambda x: x',
                     name='{}_hid_lm_readout_{}'.format(self.prefix, level),
                     **self.default_kwargs)
@@ -851,7 +851,8 @@ class Decoder(EncoderDecoderBase):
                 read_from = read_from_var
             readout += self.hidden_readouts[level](read_from)
             if 'use_external_lm' in self.state and self.state['use_external_lm']:
-                readout += self.hidden_lm_readouts[level](read_from_lm)
+                readout += self.hidden_lm_readouts[level](read_from_lm)    
+            
         if self.state['bigram']:
             if mode != Decoder.EVALUATION:
                 check_first_word = (y > 0
@@ -886,7 +887,10 @@ class Decoder(EncoderDecoderBase):
                     temp=T,
                     target=sample)
             log_prob = self.output_layer.cost_per_sample
-            return [sample] + [log_prob] + hidden_layers + hidden_layers_lm
+            if 'use_external_lm' in self.state and self.state['use_external_lm']:
+                return [sample] + [log_prob] + hidden_layers_lm + hidden_layers
+            else:
+                return [sample] + [log_prob] + hidden_layers
         elif mode == Decoder.BEAM_SEARCH:
             return self.output_layer(
                     state_below=readout.out,
@@ -918,13 +922,14 @@ class Decoder(EncoderDecoderBase):
         assert prev_word.ndim == 1
         # skip the previous word log probability
         assert next(args).ndim == 1
-        prev_hidden_states = [next(args) for k in range(self.num_levels)]
-        assert prev_hidden_states[0].ndim == 2
-
+        
         if 'use_external_lm' in self.state and self.state['use_external_lm']:
             prev_lm_states = [next(args) for k in range(self.num_levels)]
             assert prev_lm_states[0].ndim == 2
         
+        prev_hidden_states = [next(args) for k in range(self.num_levels)]
+        assert prev_hidden_states[0].ndim == 2
+
         # Arguments that correspond to scan's "non_sequences":
         c = next(args)
         assert c.ndim == 2
@@ -935,8 +940,8 @@ class Decoder(EncoderDecoderBase):
                             given_lm_init_states=prev_lm_states, T=T, c=c)
 
         sample, log_prob = self.build_decoder(y=prev_word, step_num=step_num, mode=Decoder.SAMPLING, **decoder_args)[:2]
-        hidden_states, hidden_states_lm = self.build_decoder(y=sample, step_num=step_num, mode=Decoder.SAMPLING, **decoder_args)[2:]
-        return [sample, log_prob] + hidden_states_lm + hidden_states
+        hidden_states_lm, hidden_states = self.build_decoder(y=sample, step_num=step_num, mode=Decoder.SAMPLING, **decoder_args)[2:]
+        return [sample, log_prob] + [hidden_states_lm] + [hidden_states]
 
     def build_initializers(self, c):
         return [init(c).out for init in self.initializers]
@@ -944,7 +949,7 @@ class Decoder(EncoderDecoderBase):
     def build_sampler(self, n_samples, n_steps, T, c):
         states = [TT.zeros(shape=(n_samples,), dtype='int64'),
                 TT.zeros(shape=(n_samples,), dtype='float32')]
-        
+
         if 'use_external_lm' in self.state and self.state['use_external_lm']:
             floatX = numpy.float32 if theano.config.floatX=='float32' \
                                     else numpy.float64
@@ -952,7 +957,7 @@ class Decoder(EncoderDecoderBase):
                         for i in xrange(self.num_levels)]
             states += [ReplicateLayer(n_samples)(TT.alloc(floatX(0), lm_dims[i])).out 
                         for i, init in enumerate(self.initializers_lm)]
-            
+        
         init_c = c[0, -self.state['dim']:]
         states += [ReplicateLayer(n_samples)(init(init_c).out).out for init in self.initializers]
 
@@ -1119,7 +1124,7 @@ class RNNEncoderDecoder(object):
             indx_word=self.state['indx_word_target'],
             indx_word_src=self.state['indx_word'],
             rng=self.rng)
-        self.lm_model.load_dict(self.state)
+        self.lm_model.load_dict()
         logger.debug("Model params:\n{}".format(
             pprint.pformat(sorted([p.name for p in self.lm_model.params]))))
         return self.lm_model
