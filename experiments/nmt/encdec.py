@@ -886,7 +886,7 @@ class Decoder(EncoderDecoderBase):
                     temp=T,
                     target=sample)
             log_prob = self.output_layer.cost_per_sample
-            return [sample] + [log_prob] + hidden_layers
+            return [sample] + [log_prob] + hidden_layers + hidden_layers_lm
         elif mode == Decoder.BEAM_SEARCH:
             return self.output_layer(
                     state_below=readout.out,
@@ -934,9 +934,9 @@ class Decoder(EncoderDecoderBase):
         decoder_args = dict(given_init_states=prev_hidden_states,\
                             given_lm_init_states=prev_lm_states, T=T, c=c)
 
-        sample, h_lm, log_prob = self.build_decoder(y=prev_word, step_num=step_num, mode=Decoder.SAMPLING, **decoder_args)[:3]
-        hidden_states = self.build_decoder(y=sample, step_num=step_num, mode=Decoder.SAMPLING, **decoder_args)[3:]
-        return [sample, h_lm, log_prob] + hidden_states
+        sample, log_prob = self.build_decoder(y=prev_word, step_num=step_num, mode=Decoder.SAMPLING, **decoder_args)[:2]
+        hidden_states, hidden_states_lm = self.build_decoder(y=sample, step_num=step_num, mode=Decoder.SAMPLING, **decoder_args)[2:]
+        return [sample, log_prob] + hidden_states_lm + hidden_states
 
     def build_initializers(self, c):
         return [init(c).out for init in self.initializers]
