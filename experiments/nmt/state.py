@@ -271,13 +271,13 @@ def prototype_encdec_state():
 
     state = prototype_state()
 
-    baseDir='/data/lisatmp3/firatorh/turkishParallelCorpora/compiled/en-tr/trainSet/iwslt14/'
+    baseDir='/data/lisatmp3/firatorh/turkishParallelCorpora/iwslt14/tr-en_lm/'
     state['target'] = [baseDir + 'binarized_text.en.shuf.h5']
     state['source'] = [baseDir + 'binarized_text.tr.shuf.h5']
     state['indx_word'] = baseDir + 'ivocab.tr.pkl'
-    state['indx_word_target'] = baseDir + 'ivocab.en.pkl'
+    state['indx_word_target'] = baseDir + 'ijoint_vocab.pkl'
     state['word_indx'] = baseDir + 'vocab.tr.pkl'
-    state['word_indx_trgt'] = baseDir + 'vocab.en.pkl'
+    state['word_indx_trgt'] = baseDir + 'joint_vocab.pkl'
 
     state['null_sym_source'] = 30000
     state['null_sym_target'] = 30000
@@ -287,8 +287,8 @@ def prototype_encdec_state():
     state['seqlen'] = 30
     state['bs']  = 80
 
-    state['dim'] = 1500
-    state['rank_n_approx'] = 420
+    state['dim'] = 1200
+    state['rank_n_approx'] = 520
 
     state['prefix'] = 'encdec_'
 
@@ -330,9 +330,11 @@ def prototype_search_state_with_LM():
     state['deep_attention_acts']= [' lambda x: TT.tanh(x) ',' lambda x: TT.tanh(x) ']
 
     state['use_external_lm'] = True
-    state['external_lm'] = {'lm_state_file':'/data/lisatmp3/firatorh/languageModelling/corpora/fr_lm/lm_state.pkl',
-                            'lm_model_file':'/data/lisatmp3/firatorh/languageModelling/corpora/fr_lm/lm_model.npz',
-                            'lm_type':'LM_builder'}
+    state['external_lm'] = {
+        'lm_state_file':'/data/lisatmp3/firatorh/turkishParallelCorpora/iwslt14/tr-en_lm/lm_state.pkl',
+        'lm_model_file':'/data/lisatmp3/firatorh/turkishParallelCorpora/iwslt14/tr-en_lm/lm_model.npz',
+        'lm_type':'LM_builder'
+    }
 
     state['search'] = True
     state['last_forward'] = False

@@ -299,7 +299,7 @@ class EncoderDecoderBase(object):
                             deep_attention_acts= copy.deepcopy(self.state['deep_attention_acts'])
                                                     if isinstance(self.state['deep_attention_acts'], list) else
                                                     self.state['deep_attention_acts'])
-        #TODO: Check correctness - orhanf
+        
         if rec_layer == RecurrentLayerWithSearchAndLM:
             add_args.update(external_lm=self.state['external_lm'])
 
@@ -488,6 +488,8 @@ class Decoder(EncoderDecoderBase):
 
         if 'dim_mult' not in self.state:
             self.state['dim_mult'] = 1.
+        if 'use_external_lm' not in state:
+            self.state['use_external_lm'] = False
 
     def create_layers(self):
         """ Create all elements of Decoder's computation graph"""
@@ -514,7 +516,7 @@ class Decoder(EncoderDecoderBase):
     def _create_initialization_layers(self):
         logger.debug("_create_initialization_layers")
         self.initializers = [ZeroLayer()] * self.num_levels
-        if 'use_external_lm' in self.state and self.state['use_external_lm']:
+        if self.state['use_external_lm']:
             self.initializers_lm = [ZeroLayer()] * self.num_levels
         if self.state['bias_code']:
             for level in range(self.num_levels):
@@ -592,7 +594,7 @@ class Decoder(EncoderDecoderBase):
                 name='{}_hid_readout_{}'.format(self.prefix, level),
                 **readout_kwargs)
 
-        if 'use_external_lm' in self.state and self.state['use_external_lm']:
+        if self.state['use_external_lm']:
             self.hidden_lm_readouts = [None] * self.num_levels
             for level in range(self.num_levels):
                 self.hidden_lm_readouts[level] = MultiLayer(
@@ -776,7 +778,7 @@ class Decoder(EncoderDecoderBase):
                 add_kwargs['return_alignment'] = self.compute_alignment
                 
                 #TODO: This part definitely should be explained
-                if 'use_external_lm' in  self.state and self.state['use_external_lm']:
+                if self.state['use_external_lm']:
                     add_kwargs['y'] = y
                     if mode != Decoder.EVALUATION:
                         add_kwargs['lm_state_before']=lm_init_states[level]
@@ -801,7 +803,7 @@ class Decoder(EncoderDecoderBase):
                 else:
                     #This implicitly wraps each element of result.out with a Layer to keep track of the parameters.
                     #It is equivalent to h=result[0], ctx=result[1]
-                    if 'use_external_lm' in self.state and self.state['use_external_lm']:
+                    if self.state['use_external_lm']:
                         h, h_lm, ctx = result
                         hidden_layers_lm.append(h_lm)
                     else:
@@ -834,11 +836,11 @@ class Decoder(EncoderDecoderBase):
         for level in range(self.num_levels):
             if mode != Decoder.EVALUATION:
                 read_from = init_states[level]
-                if 'use_external_lm' in self.state and self.state['use_external_lm']:
+                if self.state['use_external_lm']:
                     read_from_lm = lm_init_states[level]
             else:
                 read_from = hidden_layers[level]
-                if 'use_external_lm' in self.state and self.state['use_external_lm']:
+                if self.state['use_external_lm']:
                     read_from_lm = hidden_layers_lm[level]
             read_from_var = read_from if type(read_from) == theano.tensor.TensorVariable else read_from.out
             if read_from_var.ndim == 3:
@@ -850,7 +852,7 @@ class Decoder(EncoderDecoderBase):
             else:
                 read_from = read_from_var
             readout += self.hidden_readouts[level](read_from)
-            if 'use_external_lm' in self.state and self.state['use_external_lm']:
+            if self.state['use_external_lm']:
                 readout += self.hidden_lm_readouts[level](read_from_lm)    
             
         if self.state['bigram']:
@@ -887,7 +889,7 @@ class Decoder(EncoderDecoderBase):
                     temp=T,
                     target=sample)
             log_prob = self.output_layer.cost_per_sample
-            if 'use_external_lm' in self.state and self.state['use_external_lm']:
+            if self.state['use_external_lm']:
                 return [sample] + [log_prob] + hidden_layers_lm + hidden_layers
             else:
                 return [sample] + [log_prob] + hidden_layers
@@ -923,7 +925,7 @@ class Decoder(EncoderDecoderBase):
         # skip the previous word log probability
         assert next(args).ndim == 1
         
-        if 'use_external_lm' in self.state and self.state['use_external_lm']:
+        if self.state['use_external_lm']:
             prev_lm_states = [next(args) for k in range(self.num_levels)]
             assert prev_lm_states[0].ndim == 2
         
@@ -950,7 +952,7 @@ class Decoder(EncoderDecoderBase):
         states = [TT.zeros(shape=(n_samples,), dtype='int64'),
                 TT.zeros(shape=(n_samples,), dtype='float32')]
 
-        if 'use_external_lm' in self.state and self.state['use_external_lm']:
+        if self.state['use_external_lm']:
             floatX = numpy.float32 if theano.config.floatX=='float32' \
                                     else numpy.float64
             lm_dims = [self.transitions[i].lm_wrapper.n_hids 
@@ -1155,6 +1157,10 @@ class RNNEncoderDecoder(object):
                 outputs=[self.sample, self.sample_log_prob],
                 updates=self.sampling_updates,
                 name="sample_fn")
+        #TODO: remove this after checking - orhanf
+        theano.printing.pydotprint(self.sample_fn,
+                                   outfile='./sample_fn_graph.png',
+                                   scan_graphs=True)
         if not many_samples:
             def sampler(*args):
                 return map(lambda x : x.squeeze(), self.sample_fn(1, *args))
