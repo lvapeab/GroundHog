@@ -40,6 +40,8 @@ class LM_Model(Model):
                   indx_word_src=None,
                   character_level = False,
                   exclude_params_for_norm=None,
+                  exclude_params=None,
+                  not_save_params=[],
                   rng = None):
         """
         Constructs a model, that respects the interface required by the
@@ -102,11 +104,16 @@ class LM_Model(Model):
                                        sample_fn=sample_fn,
                                        indx_word=indx_word,
                                        indx_word_src=indx_word_src,
+                                       not_save_params=not_save_params,
                                        rng=rng)
         if exclude_params_for_norm is None:
             self.exclude_params_for_norm = []
         else:
             self.exclude_params_for_norm = exclude_params_for_norm
+        if exclude_params is None:
+            self.exclude_params = []
+        else:
+            self.exclude_params = exclude_params
         self.need_inputs_for_generating_noise=need_inputs_for_generating_noise
         self.cost_layer = cost_layer
         self.validate_step = valid_fn
@@ -129,9 +136,12 @@ class LM_Model(Model):
             scale = numpy.float32(1)
         scale *= numpy.float32(numpy.log(2))
 
-        grad_norm = TT.sqrt(sum(TT.sum(x**2)
-            for x,p in zip(self.param_grads, self.params) if p not in
+        _params = [p for p in self.params if p not in self.exclude_params]
+        _param_grads = [g for p, g in zip(self.params,self.param_grads) if p not in self.exclude_params]
+        grad_norm = TT.sqrt(sum(TT.sum(TT.sqr(x))
+            for x,p in zip(_param_grads, _params) if p not in
                 self.exclude_params_for_norm))
+        # another place to add stuff that gets saved into timing.npz
         new_properties = [
                 ('grad_norm', grad_norm),
                 ('log2_p_word', self.train_cost / num_words / scale),
@@ -262,5 +272,4 @@ class LM_Model(Model):
             else:
                 self.add_noise()
         return inps
-
 

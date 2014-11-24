@@ -271,13 +271,13 @@ def prototype_encdec_state():
 
     state = prototype_state()
 
-    baseDir='/data/lisatmp3/firatorh/turkishParallelCorpora/compiled/en-tr/trainSet/iwslt14/'
+    baseDir='/data/lisatmp3/firatorh/turkishParallelCorpora/iwslt14/tr-en_lm/'
     state['target'] = [baseDir + 'binarized_text.en.shuf.h5']
     state['source'] = [baseDir + 'binarized_text.tr.shuf.h5']
     state['indx_word'] = baseDir + 'ivocab.tr.pkl'
-    state['indx_word_target'] = baseDir + 'ivocab.en.pkl'
+    state['indx_word_target'] = baseDir + 'ijoint_vocab.pkl'
     state['word_indx'] = baseDir + 'vocab.tr.pkl'
-    state['word_indx_trgt'] = baseDir + 'vocab.en.pkl'
+    state['word_indx_trgt'] = baseDir + 'joint_vocab.pkl'
 
     state['null_sym_source'] = 30000
     state['null_sym_target'] = 30000
@@ -287,8 +287,8 @@ def prototype_encdec_state():
     state['seqlen'] = 30
     state['bs']  = 80
 
-    state['dim'] = 1500
-    state['rank_n_approx'] = 420
+    state['dim'] = 1000
+    state['rank_n_approx'] = 620
 
     state['prefix'] = 'encdec_'
 
@@ -302,7 +302,7 @@ def prototype_search_state():
 
     state['dec_rec_layer'] = 'RecurrentLayerWithSearch'
 
-    state['deep_attention']= True
+    state['deep_attention']= False
     state['deep_attention_n_hids']= [1500,1500]
     state['deep_attention_acts']= [' lambda x: TT.tanh(x) ',' lambda x: TT.tanh(x) ']
 
@@ -329,3 +329,46 @@ def prototype_phrase_lstm_state():
     state['prefix'] = 'phrase_lstm_'
 
     return state
+
+def prototype_search_state_with_LM():
+
+    state = prototype_encdec_state()
+
+    state['include_lm'] = True
+    state['reload_lm'] = True 
+    state['cutoff'] = 1.0
+    state['hookFreq'] =400
+    state['saveFreq'] = 1000
+
+    state['dec_rec_layer'] = 'RecurrentLayerWithSearch'
+    state['search'] = True
+    state['last_forward'] = False
+    state['forward'] = True
+    state['backward'] = True
+    state['seqlen'] = 50
+    state['sort_k_batches'] = 20
+    state['prefix'] = 'searchWithLM_'
+    return state
+
+def prototype_search_state_test_prototype_eos20():
+    """This prototype is the configuration used to train the RNNsearch-50 model from the paper
+    'Neural Machine Translation by Jointly Learning to Align and Translate' """
+
+    state = prototype_encdec_state()
+
+    state['include_lm'] = True
+    state['reload_lm'] = True 
+    state['cutoff'] = 1.0
+    state['hookFreq'] =200
+    state['algo'] = 'SGD_rmsprop'
+
+    state['dec_rec_layer'] = 'RecurrentLayerWithSearch'
+    state['search'] = True
+    state['last_forward'] = False
+    state['forward'] = True
+    state['backward'] = True
+    state['seqlen'] = 50
+    state['sort_k_batches'] = 20
+    state['prefix'] = '/data/lisatmp3/xukelvin/tmp/joint_eos20/search_test_'
+    return state
+

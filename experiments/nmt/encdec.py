@@ -26,6 +26,10 @@ from groundhog.models import LM_Model
 from groundhog.datasets import PytablesBitextIterator
 from groundhog.utils import sample_zeros, sample_weights_orth, init_bias, sample_weights_classic
 import groundhog.utils as utils
+from experiments.nmt import \
+        LM_builder,\
+        prototype_lm_state,\
+        prototype_lm_state_en
 
 logger = logging.getLogger(__name__)
 
@@ -569,11 +573,16 @@ class Maxout(object):
             shape2 = TT.cast(self.maxout_part, 'int64')
             x = x.reshape([shape1, shape2])
             x = x.max(1)
-        else:
+        elif x.ndim == 2:
             shape1 = TT.cast(shape[1] / self.maxout_part, 'int64')
             shape2 = TT.cast(self.maxout_part, 'int64')
             x = x.reshape([shape[0], shape1, shape2])
             x = x.max(2)
+        else: # x.ndim == 3
+            shape1 = TT.cast(shape[2] / self.maxout_part, 'int64')
+            shape2 = TT.cast(self.maxout_part, 'int64')
+            x = x.reshape([shape[0], shape[1], shape1, shape2])
+            x = x.max(3)
         return x
 
 def prefix_lookup(state, p, s):
@@ -655,12 +664,13 @@ class EncoderDecoderBase(object):
         rec_layer = eval(prefix_lookup(self.state, self.prefix, 'rec_layer'))
         add_args = dict()
         if rec_layer == RecurrentLayerWithSearch:
-            add_args = dict(c_dim=self.state['c_dim'],
-                            deep_attention=self.state['deep_attention'],
-                            deep_attention_n_hids=self.state['deep_attention_n_hids'],
-                            deep_attention_acts= copy.deepcopy(self.state['deep_attention_acts']) 
-                                                    if isinstance(self.state['deep_attention_acts'], list) else 
-                                                    self.state['deep_attention_acts'])
+            add_args = dict(c_dim=self.state['c_dim'])
+            if self.state['deep_attention']:
+                add_args['deep_attention'] = self.state['deep_attention']
+                add_args['deep_attention_n_hids'] = self.state['deep_attention_n_hids']
+                add_args['deep_attention_acts'] = copy.deepcopy(self.state['deep_attention_acts']) \
+                                                    if isinstance(self.state['deep_attention_acts'], list) else \
+                                                    self.state['deep_attention_acts']
         for level in range(self.num_levels):
             self.transitions.append(rec_layer(
                     self.rng,
@@ -838,6 +848,10 @@ class Decoder(EncoderDecoderBase):
         self.skip_init = skip_init
         self.compute_alignment = compute_alignment
 
+        # should we really keep these separate?
+        if self.state['include_lm']:
+            self.state_lm = prototype_lm_state_en()
+
         # Actually there is a problem here -
         # we don't make difference between number of input layers
         # and outputs layers.
@@ -861,12 +875,22 @@ class Decoder(EncoderDecoderBase):
         self._create_decoding_layers()
         self._create_readout_layers()
 
+        if self.state['include_lm']:
+            self._create_lm()
+
         if self.state['search']:
             assert self.num_levels == 1
             self.transitions[0].set_decoding_layers(
                     self.decode_inputers[0],
                     self.decode_reseters[0],
                     self.decode_updaters[0])
+
+    def _create_lm(self):
+        logger.debug("Creating language model")
+        self.LM_builder = LM_builder(self.state_lm, self.rng, skip_init=False)
+        # build output refers to the softmax over words 
+        self.LM_builder.__create_layers__(build_output=False)
+        self.excluded_params = self.LM_builder.get_const_params()
 
     def _create_initialization_layers(self):
         logger.debug("_create_initialization_layers")
@@ -958,6 +982,16 @@ class Decoder(EncoderDecoderBase):
                 name='{}_prev_readout_{}'.format(self.prefix, level),
                 **self.default_kwargs)
 
+        if self.state['include_lm']:
+            self.lm_embedder = MultiLayer(
+                self.rng,
+                n_in=self.state_lm['dim'],
+                n_hids=self.state['dim'],
+                activation=['lambda x:x'],
+                learn_bias=False,
+                name='{}_lm_embed_{}'.format(self.prefix, level),
+                **self.default_kwargs)
+
         if self.state['deep_out']:
             act_layer = UnaryOp(activation=eval(self.state['unary_activ']))
             drop_layer = DropOp(rng=self.rng, dropout=self.state['dropout'])
@@ -990,7 +1024,8 @@ class Decoder(EncoderDecoderBase):
             step_num=None,
             mode=EVALUATION,
             given_init_states=None,
-            T=1):
+            T=1,
+            prev_hid=None):
         """Create the computational graph of the RNN Decoder.
 
         :param c:
@@ -1192,6 +1227,30 @@ class Decoder(EncoderDecoderBase):
                     readout += Shift()(self.prev_word_readout(approx_embeddings).reshape(
                         (y.shape[0], y.shape[1], self.state['dim']))).reshape(
                                 readout.out.shape)
+                        
+        # todo, add language model
+        if self.state['include_lm']:
+            lm_hidden_state = self.LM_builder.build_for_translation(y, y_mask, prev_hid=prev_hid)
+            if mode != Decoder.EVALUATION:
+                check_first_word = (y > 0
+                    if self.state['check_first_word']
+                    else TT.ones((y.shape[0]), dtype="float32"))
+                readout += TT.shape_padright(check_first_word) * self.lm_embedder(lm_hidden_state).out
+            else:
+                if y.ndim == 1:
+                    readout += Shift()(self.lm_embedder(lm_hidden_state).reshape(
+                        (y.shape[0], 1, self.state['dim'])))
+                else:
+                    # This place needs explanation. When prev_word_readout is applied to
+                    # approx_embeddings the resulting shape is
+                    # (n_batches * sequence_length, repr_dimensionality). We first
+                    # transform it into 3D tensor to shift forward in time. Then
+                    # reshape it back.
+                    readout += Shift()(self.lm_embedder(lm_hidden_state).reshape(
+                        (y.shape[0], y.shape[1], self.state['dim']))).reshape(
+                                readout.out.shape)
+        
+        
         for fun in self.output_nonlinearities:
             readout = fun(readout)
 
@@ -1206,7 +1265,10 @@ class Decoder(EncoderDecoderBase):
                     temp=T,
                     target=sample)
             log_prob = self.output_layer.cost_per_sample
-            return [sample] + [log_prob] + hidden_layers
+            retvals = [sample] + [log_prob] + hidden_layers
+            if self.state['include_lm']:
+                retvals += [lm_hidden_state]
+            return retvals
         elif mode == Decoder.BEAM_SEARCH:
             return self.output_layer(
                     state_below=readout.out,
@@ -1240,6 +1302,10 @@ class Decoder(EncoderDecoderBase):
         assert next(args).ndim == 1
         prev_hidden_states = [next(args) for k in range(self.num_levels)]
         assert prev_hidden_states[0].ndim == 2
+        if self.state['include_lm']:
+            last_hid_state = next(args)
+        else:
+            last_hid_state = None
 
         # Arguments that correspond to scan's "non_sequences":
         c = next(args)
@@ -1247,7 +1313,7 @@ class Decoder(EncoderDecoderBase):
         T = next(args)
         assert T.ndim == 0
 
-        decoder_args = dict(given_init_states=prev_hidden_states, T=T, c=c)
+        decoder_args = dict(given_init_states=prev_hidden_states, T=T, c=c, prev_hid=last_hid_state)
 
         sample, log_prob = self.build_decoder(y=prev_word, step_num=step_num, mode=Decoder.SAMPLING, **decoder_args)[:2]
         hidden_states = self.build_decoder(y=sample, step_num=step_num, mode=Decoder.SAMPLING, **decoder_args)[2:]
@@ -1261,7 +1327,10 @@ class Decoder(EncoderDecoderBase):
                 TT.zeros(shape=(n_samples,), dtype='float32')]
         init_c = c[0, -self.state['dim']:]
         states += [ReplicateLayer(n_samples)(init(init_c).out).out for init in self.initializers]
-
+        # we need to add another list of zeros for the initial state of the hiddens
+        if self.state['include_lm']:
+            states += [TT.zeros(shape=( n_samples, self.state_lm['dim']), dtype='float32')]
+            
         if not self.state['search']:
             c = PadLayer(n_steps)(c).out
 
@@ -1415,21 +1484,29 @@ class RNNEncoderDecoder(object):
                 for i in range(self.decoder.num_levels)]
         self.gen_y = TT.lvector("gen_y")
 
+    # note we are calling this a lm, when really it is a translation model
     def create_lm_model(self):
+        # singleton constructor
         if hasattr(self, 'lm_model'):
             return self.lm_model
+        # if we include a pre-trained lm, we should exclude its recurrent
+        # weights and optionally its embedding matrix
+        excluded_params = None
+        if hasattr(self.decoder, 'excluded_params'):
+            excluded_params = self.decoder.excluded_params
         self.lm_model = LM_Model(
             cost_layer=self.predictions,
             sample_fn=self.create_sampler(),
             weight_noise_amount=self.state['weight_noise_amount'],
             indx_word=self.state['indx_word_target'],
             indx_word_src=self.state['indx_word'],
-            rng=self.rng)
+            rng=self.rng,
+            exclude_params=excluded_params)
         self.lm_model.load_dict(self.state)
         logger.debug("Model params:\n{}".format(
             pprint.pformat(sorted([p.name for p in self.lm_model.params]))))
         return self.lm_model
-
+    
     def create_representation_computer(self):
         if not hasattr(self, "repr_fn"):
             self.repr_fn = theano.function(
