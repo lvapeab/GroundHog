@@ -48,7 +48,9 @@ class BeamSearch(object):
         c = self.comp_repr(seq)[0]
         states = map(lambda x : x[None, :], self.comp_init_states(c))
         dim = states[0].shape[1]
-
+        dim_lm = self.enc_dec.decoder.state_lm['dim']
+        states_lm = numpy.zeros((1,dim_lm),dtype="float32")
+        
         num_levels = len(states)
 
         fin_trans = []
@@ -67,7 +69,8 @@ class BeamSearch(object):
             last_words = (numpy.array(map(lambda t : t[-1], trans))
                     if k > 0
                     else numpy.zeros(beam_size, dtype="int64"))
-            log_probs = numpy.log(self.comp_next_probs(c, k, last_words, *states)[0])
+            
+            log_probs = numpy.log(self.comp_next_probs(c, k, last_words, states_lm, *states)[0])
 
             # Adjust log probs according to search restrictions
             if ignore_unk:
@@ -94,6 +97,7 @@ class BeamSearch(object):
             new_costs = numpy.zeros(n_samples)
             new_states = [numpy.zeros((n_samples, dim), dtype="float32") for level
                     in range(num_levels)]
+            new_states_lm = numpy.zeros((n_samples, dim_lm), dtype="float32") 
             inputs = numpy.zeros(n_samples, dtype="int64")
             for i, (orig_idx, next_word, next_cost) in enumerate(
                     zip(trans_indices, word_indices, costs)):
@@ -101,8 +105,9 @@ class BeamSearch(object):
                 new_costs[i] = next_cost
                 for level in range(num_levels):
                     new_states[level][i] = states[level][orig_idx]
+                new_states_lm[i] = states_lm[orig_idx]
                 inputs[i] = next_word
-            new_states = self.comp_next_states(c, k, inputs, *new_states)
+            new_states, new_states_lm = self.comp_next_states(c, k, inputs, new_states_lm, *new_states)
 
             # Filter the sequences that end with end-of-sequence character
             trans = []
@@ -116,8 +121,9 @@ class BeamSearch(object):
                 else:
                     n_samples -= 1
                     fin_trans.append(new_trans[i])
-                    fin_costs.append(new_costs[i])
-            states = map(lambda x : x[indices], new_states)
+                    fin_costs.append(new_costs[i])            
+            states = map(lambda x : x[indices], [new_states])
+            states_lm = new_states_lm[indices]
 
         # Dirty tricks to obtain any translation
         if not len(fin_trans):
