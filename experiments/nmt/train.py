@@ -117,9 +117,9 @@ class BleuValidator(object):
             try:
                 bleu_score = numpy.load(state['prefix'] + 'val_bleu_scores.npz')
                 self.val_bleu_curve = bleu_score['bleu_scores'].tolist()
-                print "BleuScores Reloaded"
+                logger.debug("BleuScores Reloaded")
             except:
-                print "BleuScores not Found"
+                logger.debug("BleuScores not Found")
 
         if state['char_based_bleu']:
             self.multibleu_cmd = ['perl', state['bleu_script'], '-char', state['validation_set_grndtruth'], '<']
@@ -159,7 +159,7 @@ class BleuValidator(object):
             seq, parsed_in = parse_input(self.state, self.indx_word, seqin, idx2word=self.idict_src)
 
             # draw sample, checking to ensure we don't get an empty string back
-            trans, costs, _ = sample.sample(self.lm_model, seq, self.n_samples,
+            trans, costs, _ = sample(self.lm_model, seq, self.n_samples,
                     beam_search=self.beam_search, ignore_unk=self.ignore_unk, normalize=self.normalize)
             try:
                 best = numpy.argmin(costs)
@@ -185,8 +185,8 @@ class BleuValidator(object):
                 print >> mb_subprocess.stdin, trans_out
                 if self.verbose:
                     print >> ftrans, trans_out
-
-            if i != 0 and i % 50 == 0:
+         
+            if i != 0 and i % 100 == 0:
                 print "Translated {} lines of validation set...".format(i)
             mb_subprocess.stdin.flush()
 
