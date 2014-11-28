@@ -413,3 +413,62 @@ def prototype_search_state_zh_en_with_LM():
 
     return state
 
+def prototype_search_state_without_LM():
+
+    state = prototype_encdec_state()
+
+    state['include_lm'] = False
+    state['reload_lm'] = False
+    state['cutoff'] = 1.0
+    state['hookFreq'] =400
+    state['saveFreq'] = 45
+
+    state['dec_rec_layer'] = 'RecurrentLayerWithSearch'
+    state['search'] = True
+    state['last_forward'] = False
+    state['forward'] = True
+    state['backward'] = True
+    state['seqlen'] = 50
+    state['sort_k_batches'] = 20
+    state['prefix'] = 'searchWithoutLM_'
+    return state
+
+def prototype_search_state_zh_en_without_LM():
+
+    state = prototype_encdec_state()
+
+    state['include_lm'] = False
+    state['reload_lm'] = False
+    state['cutoff'] = 1.0
+    state['hookFreq'] =400
+    state['algo'] = 'SGD_adadelta'
+    state['saveFreq'] = 45
+
+    # Source and target sentence
+    state['target']=["/data/lisatmp3/firatorh/nmt/zh-en_lm/binarized_text.en.shuf.h5"]
+    state['source']=["/data/lisatmp3/firatorh/nmt/zh-en_lm/binarized_text.zh.shuf.h5"]
+
+    # Word -> Id and Id-> Word Dictionaries
+    state['indx_word']="/data/lisatmp3/firatorh/nmt/zh-en_lm/ivocab.zh.pkl"
+    state['indx_word_target']="/data/lisatmp3/firatorh/nmt/zh-en_lm/ijoint_vocab.pkl"
+    state['word_indx']="/data/lisatmp3/firatorh/nmt/zh-en_lm/vocab.zh.pkl"
+    state['word_indx_trgt']="/data/lisatmp3/firatorh/nmt/zh-en_lm/joint_vocab.pkl"
+
+    state['source_encoding'] = 'utf8'
+
+    state['null_sym_source']=4839
+    state['null_sym_target']=30000
+
+    state['n_sym_source']=state['null_sym_source'] + 1
+    state['n_sym_target']=state['null_sym_target'] + 1
+
+    state['dec_rec_layer'] = 'RecurrentLayerWithSearch'
+    state['search'] = True
+    state['last_forward'] = False
+    state['forward'] = True
+    state['backward'] = True
+    state['seqlen'] = 50
+    state['sort_k_batches'] = 20
+    state['prefix']='/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/searchWithoutLM_'
+
+    return state

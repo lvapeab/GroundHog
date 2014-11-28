@@ -888,7 +888,7 @@ class Decoder(EncoderDecoderBase):
     def _create_lm(self):
         logger.debug("Creating language model")
         self.LM_builder = LM_builder(self.state_lm, self.rng, skip_init=False)
-        # build output refers to the softmax over words 
+        # build output refers to the softmax over words
         self.LM_builder.__create_layers__(build_output=False)
         self.excluded_params = self.LM_builder.get_const_params()
 
@@ -1227,7 +1227,7 @@ class Decoder(EncoderDecoderBase):
                     readout += Shift()(self.prev_word_readout(approx_embeddings).reshape(
                         (y.shape[0], y.shape[1], self.state['dim']))).reshape(
                                 readout.out.shape)
-                        
+
         # todo, add language model
         if self.state['include_lm']:
             lm_hidden_state = self.LM_builder.build_for_translation(y, y_mask, prev_hid=prev_hid)
@@ -1249,8 +1249,8 @@ class Decoder(EncoderDecoderBase):
                     readout += Shift()(self.lm_embedder(lm_hidden_state).reshape(
                         (y.shape[0], y.shape[1], self.state['dim']))).reshape(
                                 readout.out.shape)
-        
-        
+
+
         for fun in self.output_nonlinearities:
             readout = fun(readout)
 
@@ -1330,7 +1330,7 @@ class Decoder(EncoderDecoderBase):
         # we need to add another list of zeros for the initial state of the hiddens
         if self.state['include_lm']:
             states += [TT.zeros(shape=( n_samples, self.state_lm['dim']), dtype='float32')]
-            
+
         if not self.state['search']:
             c = PadLayer(n_steps)(c).out
 
@@ -1385,6 +1385,8 @@ class RNNEncoderDecoder(object):
         self.rng = rng
         self.skip_init = skip_init
         self.compute_alignment = compute_alignment
+        if 'include_lm' not in self.state:
+            self.state['include_lm'] = False
 
     def build(self):
         logger.debug("Create input variables")
@@ -1483,9 +1485,9 @@ class RNNEncoderDecoder(object):
         self.current_states = [TT.matrix("cur_{}".format(i))
                 for i in range(self.decoder.num_levels)]
         self.gen_y = TT.lvector("gen_y")
-        if self.state['include_lm']:
-            self.current_states_lm = TT.matrix("cur_lm_{}".format(i))
-            
+        #if self.state['include_lm']:
+        self.current_states_lm = TT.matrix("cur_lm")
+
     # note we are calling this a lm, when really it is a translation model
     def create_lm_model(self):
         # singleton constructor
@@ -1508,7 +1510,7 @@ class RNNEncoderDecoder(object):
         logger.debug("Model params:\n{}".format(
             pprint.pformat(sorted([p.name for p in self.lm_model.params]))))
         return self.lm_model
-    
+
     def create_representation_computer(self):
         if not hasattr(self, "repr_fn"):
             self.repr_fn = theano.function(
@@ -1571,10 +1573,9 @@ class RNNEncoderDecoder(object):
             self.next_states_fn = theano.function(
                     inputs=[self.c, self.step_num, self.gen_y] + [self.current_states_lm] + self.current_states,
                     outputs=self.decoder.build_next_states_computer(
-                        self.c, self.step_num, self.gen_y, self.current_states, self.current_states_lm),
+                           self.c, self.step_num, self.gen_y, self.current_states,self.current_states_lm),
                     name="next_states_fn",on_unused_input='warn')
         return self.next_states_fn
-
 
     def create_probs_computer(self, return_alignment=False):
         if not hasattr(self, 'probs_fn'):
@@ -1599,7 +1600,12 @@ def parse_input(state, word2idx, line, raise_unk=False, idx2word=None, unk_sym=-
         unk_sym = state['unk_sym_source']
     if null_sym < 0:
         null_sym = state['null_sym_source']
-    seqin = line.split()
+        
+    if state['source_encoding'] == 'utf8':
+        seqin = [l for l in line]
+    else:
+        seqin = line.split()
+        
     seqlen = len(seqin)
     seq = numpy.zeros(seqlen+1, dtype='int64')
     for idx,sx in enumerate(seqin):

@@ -48,9 +48,12 @@ class BeamSearch(object):
         c = self.comp_repr(seq)[0]
         states = map(lambda x : x[None, :], self.comp_init_states(c))
         dim = states[0].shape[1]
-        dim_lm = self.enc_dec.decoder.state_lm['dim']
-        states_lm = numpy.zeros((1,dim_lm),dtype="float32")
         
+        states_lm = None
+        if self.enc_dec.state['include_lm']:
+            dim_lm = self.enc_dec.decoder.state_lm['dim']
+            states_lm = numpy.zeros((1,dim_lm),dtype="float32")
+            
         num_levels = len(states)
 
         fin_trans = []
@@ -62,7 +65,11 @@ class BeamSearch(object):
         for k in range(3 * len(seq)):
             if n_samples == 0:
                 break
-
+            
+            new_states_lm = None
+            if self.enc_dec.state['include_lm']:
+                new_states_lm = numpy.zeros((n_samples, dim_lm), dtype="float32")
+                
             # Compute probabilities of the next words for
             # all the elements of the beam.
             beam_size = len(trans)
@@ -97,7 +104,6 @@ class BeamSearch(object):
             new_costs = numpy.zeros(n_samples)
             new_states = [numpy.zeros((n_samples, dim), dtype="float32") for level
                     in range(num_levels)]
-            new_states_lm = numpy.zeros((n_samples, dim_lm), dtype="float32") 
             inputs = numpy.zeros(n_samples, dtype="int64")
             for i, (orig_idx, next_word, next_cost) in enumerate(
                     zip(trans_indices, word_indices, costs)):
@@ -105,10 +111,15 @@ class BeamSearch(object):
                 new_costs[i] = next_cost
                 for level in range(num_levels):
                     new_states[level][i] = states[level][orig_idx]
-                new_states_lm[i] = states_lm[orig_idx]
+                if self.enc_dec.state['include_lm']:
+                    new_states_lm[i] = states_lm[orig_idx]
                 inputs[i] = next_word
-            new_states, new_states_lm = self.comp_next_states(c, k, inputs, new_states_lm, *new_states)
-
+            
+            if self.enc_dec.state['include_lm']:
+                new_states, new_states_lm = self.comp_next_states(c, k, inputs, new_states_lm, *new_states)
+            else:
+                new_states = self.comp_next_states(c, k, inputs, new_states_lm, *new_states)
+            
             # Filter the sequences that end with end-of-sequence character
             trans = []
             costs = []
@@ -122,8 +133,12 @@ class BeamSearch(object):
                     n_samples -= 1
                     fin_trans.append(new_trans[i])
                     fin_costs.append(new_costs[i])            
-            states = map(lambda x : x[indices], [new_states])
-            states_lm = new_states_lm[indices]
+            
+            if self.enc_dec.state['include_lm']:
+                states = map(lambda x : x[indices], [new_states])
+                states_lm = new_states_lm[indices]  
+            else:
+                states = map(lambda x : x[indices], new_states)
 
         # Dirty tricks to obtain any translation
         if not len(fin_trans):
@@ -266,16 +281,26 @@ def main():
         total_cost = 0.0
         logging.debug("Beam size: {}".format(n_samples))
         for i, line in enumerate(fsrc):
-            seqin = line.strip()
+            if state['source_encoding'] == 'utf8':
+                seqin = line.strip().decode('utf-8')
+            else:
+                seqin = line.strip()
+                
             seq, parsed_in = parse_input(state, indx_word, seqin, idx2word=idict_src)
             if args.verbose:
                 print "Parsed Input:", parsed_in
             trans, costs, _ = sample(lm_model, seq, n_samples, sampler=sampler,
                     beam_search=beam_search, ignore_unk=args.ignore_unk, normalize=args.normalize)
             best = numpy.argmin(costs)
-            print >>ftrans, trans[best]
+            if state['target_encoding'] == 'utf8':
+                print >>ftrans, trans[best].encode('utf8').replace(" ","")
+            else:
+                print >>ftrans, trans[best]
             if args.verbose:
-                print "Translation:", trans[best]
+                if state['target_encoding'] == 'utf8':
+                    print "Translation:", trans[best].encode('utf8')
+                else:
+                    print "Translation:", trans[best]
             total_cost += costs[best]
             if (i + 1)  % 100 == 0:
                 ftrans.flush()
