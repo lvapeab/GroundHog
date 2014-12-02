@@ -1,7 +1,5 @@
 """
 Stochastic Gradient Descent.
-
-
 TODO: write more documentation
 """
 __docformat__ = 'restructedtext en'
@@ -55,18 +53,23 @@ class SGD(object):
         self.model = model
         self.rng = numpy.random.RandomState(state['seed'])
         srng = RandomStreams(self.rng.randint(213))
-        self.gs = [theano.shared(numpy.zeros(p.get_value(borrow=True).shape,
-                                             dtype=theano.config.floatX),
-                                name=p.name)
-                   for p in model.params]
-        self.gnorm2 = [theano.shared(numpy.zeros(p.get_value(borrow=True).shape,
-                                             dtype=theano.config.floatX),
-                                name=p.name+'_g2')
-                   for p in model.params]
-        self.dnorm2 = [theano.shared(numpy.zeros(p.get_value(borrow=True).shape,
-                                             dtype=theano.config.floatX),
-                                name=p.name+'_d2')
-                   for p in model.params]
+
+        _params = [p for p in model.params if p not in model.exclude_params]
+        _param_grads = [g for p, g in zip(model.params,model.param_grads) if p not in model.exclude_params]
+
+        def shared_clone(p, name):
+            if str(p.__class__).find('cuda') >= 0:
+                func = theano.shared
+            else:
+                print "+++"
+                func = TT._shared
+            return func(
+                    numpy.zeros(p.get_value().shape,
+                        dtype=theano.config.floatX),
+                    name=p.name)
+        self.gs = [shared_clone(p, name=p.name + '_g') for p in _params]
+        self.gnorm2 = [shared_clone(p, name=p.name + '_g2') for p in _params]
+        self.dnorm2 = [shared_clone(p, name=p.name + '_d2') for p in _params]
 
         self.step = 0
         self.bs = bs
@@ -77,7 +80,7 @@ class SGD(object):
                                                 dtype=x.dtype),
                                     name=x.name) for x in model.inputs]
 
-	if 'profile' not in self.state:
+        if 'profile' not in self.state:
             self.state['profile'] = 0
 
         ###################################
@@ -88,10 +91,11 @@ class SGD(object):
         self.prop_exprs = [x[1] for x in model.properties]
         self.prop_names = [x[0] for x in model.properties]
         self.update_rules = [x[1] for x in model.updates]
-        rval = theano.clone(model.param_grads + self.update_rules + \
+
+        rval = theano.clone(_param_grads + self.update_rules + \
                             self.prop_exprs + [model.train_cost],
                             replace=zip(model.inputs, loc_data))
-        nparams = len(model.params)
+        nparams = len(_params)
         nouts = len(self.prop_exprs)
         nrules = len(self.update_rules)
         gs = rval[:nparams]
@@ -99,7 +103,7 @@ class SGD(object):
         outs = rval[nparams + nrules:]
 
         norm_gs = TT.sqrt(sum(TT.sum(x**2)
-            for x,p in zip(gs, self.model.params) if p not in self.model.exclude_params_for_norm))
+            for x,p in zip(gs, _params) if p not in self.model.exclude_params_for_norm))
         if 'cutoff' in state and state['cutoff'] > 0:
             c = numpy.float32(state['cutoff'])
             if state['cutoff_rescale_length']:
@@ -107,7 +111,7 @@ class SGD(object):
 
             notfinite = TT.or_(TT.isnan(norm_gs), TT.isinf(norm_gs))
             _gs = []
-            for g,p in zip(gs,self.model.params):
+            for g,p in zip(gs,_params):
                 if p not in self.model.exclude_params_for_norm:
                     tmpg = TT.switch(TT.ge(norm_gs, c), g*c/norm_gs, g)
                     _gs.append(
@@ -136,9 +140,9 @@ class SGD(object):
         self.lr = numpy.float32(1.)
         new_params = [p - (TT.sqrt(dn2 + eps) / TT.sqrt(gn2 + eps)) * g
                 for p, g, gn2, dn2 in
-                zip(model.params, self.gs, self.gnorm2, self.dnorm2)]
+                zip(_params, self.gs, self.gnorm2, self.dnorm2)]
 
-        updates = zip(model.params, new_params)
+        updates = zip(_params, new_params)
         # d2
         d2_up = [(dn2, rho * dn2 + (1. - rho) *
             (((TT.sqrt(dn2 + eps) / TT.sqrt(gn2 + eps)) * g) ** 2.))
