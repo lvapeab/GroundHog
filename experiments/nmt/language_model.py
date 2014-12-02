@@ -345,7 +345,7 @@ class LM_builder(object):
         const_params += self.inputer.params
         const_params += self.updater.params
         const_params += self.reseter.params
-        # Recurren units
+        # Recurrent units
         const_params += self.rec.params
         return const_params
 
@@ -366,7 +366,7 @@ class LM_builder(object):
 
         self.inputs = [self.x, self.y, self.x_mask, self.y_mask]
 
-        # the demensions of this is (time*batch_id, embedding dim)
+        # the dimensions of this is (time*batch_id, embedding dim)
         # the whole input is flattened to support advanced indexing < -- should read this.
         self.x_emb = self.emb_words(self.x, no_noise_bias=self.state['no_noise_bias'])
 
@@ -383,6 +383,10 @@ class LM_builder(object):
 
         self.train_model = self.output_layer(self.rec_layer).train(target=self.y,
                 mask=self.y_mask)
+        
+        # additional variables for beam-search
+        self.gen_y = TT.lvector("gen_y")
+        self.current_states = TT.matrix("cur_lm")
 
     def get_sampler(self):
         """
@@ -424,6 +428,67 @@ class LM_builder(object):
                 updates=updates, profile=False, name='sample_fn')
 
         return sample_fn
+
+    def build_for_auxiliary_lm(self, x, prev_hid):
+        """
+        Build Computational Graph to be used in the beam-search
+        as an auxiliary language model to translation model 
+        """
+        
+        x_emb = self.emb_words(x, no_noise_bias=self.state['no_noise_bias'])
+
+        x_input = self.inputer(x_emb)
+        update_signals = self.updater(x_emb)
+        reset_signals = self.reseter(x_emb)
+
+        rec_result = self.rec(x_input,
+                              state_before=prev_hid,
+                              no_noise_bias=self.state['no_noise_bias'],
+                              one_step=True,
+                              use_noise=False,
+                              gater_below=none_if_zero(update_signals),
+                              reseter_below=none_if_zero(reset_signals))
+
+        return [self.output_layer(
+                    state_below=rec_result,
+                    temp=1).out] + [rec_result]
+
+    def create_next_probs_computer(self):
+        """
+        Compile theano function to get the log probability 
+        """
+        self.lm_next_probs_fn = theano.function(
+                inputs=[self.gen_y, self.current_states],
+                outputs=[self.build_for_auxiliary_lm(self.gen_y,
+                                                     self.current_states)[0]],
+                name="lm_next_probs_fn",on_unused_input='warn')
+        return self.lm_next_probs_fn
+
+    def create_next_states_computer(self):
+        """
+        Compile theano function to get the hidden state 
+        """
+        self.lm_next_states_fn = theano.function(
+                inputs=[self.gen_y, self.current_states],
+                outputs=[self.build_for_auxiliary_lm(self.gen_y,
+                                                     self.current_states)[1]],
+                name="lm_next_states_fn",on_unused_input='warn')
+        return self.lm_next_states_fn
+        
+    def create_lm_model(self):
+        """
+        Create an LM_model with language model(!)
+        """
+        self.lm_model = LM_Model(
+            cost_layer = self.train_model,
+            weight_noise_amount=self.state['weight_noise_amount'],
+            valid_fn = None,
+            indx_word=self.state['indx_word'],
+            indx_word_src=self.state['indx_word'],
+            clean_before_noise_fn = False,
+            noise_fn = None,
+            rng = self.rng)
+        return self.lm_model
 
 def parse_args():
     parser = argparse.ArgumentParser()

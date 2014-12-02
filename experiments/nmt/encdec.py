@@ -1387,6 +1387,8 @@ class RNNEncoderDecoder(object):
         self.compute_alignment = compute_alignment
         if 'include_lm' not in self.state:
             self.state['include_lm'] = False
+        if 'shallow_lm' not in self.state:
+            self.state['shallow_lm'] = False
 
     def build(self):
         logger.debug("Create input variables")
@@ -1600,12 +1602,12 @@ def parse_input(state, word2idx, line, raise_unk=False, idx2word=None, unk_sym=-
         unk_sym = state['unk_sym_source']
     if null_sym < 0:
         null_sym = state['null_sym_source']
-        
+
     if state['source_encoding'] == 'utf8':
         seqin = [l for l in line]
     else:
         seqin = line.split()
-        
+
     seqlen = len(seqin)
     seq = numpy.zeros(seqlen+1, dtype='int64')
     for idx,sx in enumerate(seqin):

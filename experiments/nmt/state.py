@@ -330,7 +330,7 @@ def prototype_phrase_lstm_state():
 
     return state
 
-def prototype_search_state_with_LM():
+def prototype_search_state_with_LM_TEST():
 
     state = prototype_encdec_state()
 
@@ -347,17 +347,38 @@ def prototype_search_state_with_LM():
     state['backward'] = True
     state['seqlen'] = 50
     state['sort_k_batches'] = 20
-    state['prefix'] = 'searchWithLM2_'
-    
+    state['prefix'] = 'searchWithLM_TEST_'
+
+    return state
+
+def prototype_search_state_with_LM_tr_en():
+
+    state = prototype_encdec_state()
+
+    state['include_lm'] = True
+    state['reload_lm'] = True
+    state['cutoff'] = 1.0
+    state['hookFreq'] =400
+    state['saveFreq'] = 30
+
+    state['dec_rec_layer'] = 'RecurrentLayerWithSearch'
+    state['search'] = True
+    state['last_forward'] = False
+    state['forward'] = True
+    state['backward'] = True
+    state['seqlen'] = 50
+    state['sort_k_batches'] = 20
+    state['prefix'] = 'searchWithLM0_'
+
     state['bleu_script'] = '/data/lisatmp3/firatorh/turkishParallelCorpora/iwslt14/scripts/multi-bleu.perl'
     state['validation_set'] = '/data/lisatmp3/firatorh/nmt/tr-en_lm/dev/IWSLT14.TED.dev2010.tr-en.tr.tok.seg'
     state['validation_set_grndtruth'] = '/data/lisatmp3/firatorh/nmt/tr-en_lm/dev/IWSLT14.TED.dev2010.tr-en.en.tok'
-    state['validation_set_out'] = '/data/lisatmp3/firatorh/nmt/tr-en_lm/trainedModels/searchWithLM2_valOut.txt'
+    state['validation_set_out'] = '/data/lisatmp3/firatorh/nmt/tr-en_lm/trainedModels/searchWithLM0_valOut.txt'
     state['output_validation_set'] = True
     state['beam_size'] = 20
     state['bleu_val_frequency'] = 5000
-    state['burn_in'] = 10000  
-    
+    state['burn_in'] = 10000
+
     return state
 
 def prototype_search_state_test_prototype_eos20():
@@ -383,7 +404,7 @@ def prototype_search_state_test_prototype_eos20():
     return state
 
 
-def prototype_search_state_zh_en_with_LM():
+def prototype_search_state_with_LM_zh_en():
 
     state = prototype_encdec_state()
 
@@ -419,17 +440,17 @@ def prototype_search_state_zh_en_with_LM():
     state['backward'] = True
     state['seqlen'] = 50
     state['sort_k_batches'] = 20
-    state['prefix']='/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/searchWithLM2_'
+    state['prefix']='/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/searchWithLM0_'
 
     # bleu validation args
     state['bleu_script'] = '/data/lisatmp3/firatorh/turkishParallelCorpora/iwslt14/scripts/multi-bleu.perl'
     state['validation_set'] = '/data/lisatmp3/firatorh/nmt/zh-en_lm/dev/IWSLT14.TED.dev2010.zh-en.zh.xml.txt.trimmed'
     state['validation_set_grndtruth'] = '/data/lisatmp3/firatorh/nmt/zh-en_lm/dev/IWSLT14.TED.dev2010.zh-en.en.tok'
-    state['validation_set_out'] = '/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/searchWithLM2_valOut.txt'
+    state['validation_set_out'] = '/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/searchWithLM0_valOut.txt'
     state['output_validation_set'] = True
     state['beam_size'] = 20
     state['bleu_val_frequency'] = 5000
-    state['burn_in'] = 10000  
+    state['burn_in'] = 10000
 
     return state
 
@@ -490,5 +511,85 @@ def prototype_search_state_zh_en_without_LM():
     state['seqlen'] = 50
     state['sort_k_batches'] = 20
     state['prefix']='/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/searchWithoutLM_'
+
+    return state
+
+def prototype_search_state_tr_en_with_shallow_LM():
+
+    state = prototype_encdec_state()
+
+    state['shallow_lm'] = True
+    state['reload_lm'] = True
+    state['cutoff'] = 1.0
+    state['hookFreq'] =400
+    state['saveFreq'] = 30
+
+    state['dec_rec_layer'] = 'RecurrentLayerWithSearch'
+    state['search'] = True
+    state['last_forward'] = False
+    state['forward'] = True
+    state['backward'] = True
+    state['seqlen'] = 50
+    state['sort_k_batches'] = 20
+    state['prefix'] = 'searchWithLM2_'
+
+    state['bleu_script'] = '/data/lisatmp3/firatorh/turkishParallelCorpora/iwslt14/scripts/multi-bleu.perl'
+    state['validation_set'] = '/data/lisatmp3/firatorh/nmt/tr-en_lm/dev/IWSLT14.TED.dev2010.tr-en.tr.tok.seg'
+    state['validation_set_grndtruth'] = '/data/lisatmp3/firatorh/nmt/tr-en_lm/dev/IWSLT14.TED.dev2010.tr-en.en.tok'
+    state['validation_set_out'] = '/data/lisatmp3/firatorh/nmt/tr-en_lm/trainedModels/searchWithLM2_valOut.txt'
+    state['output_validation_set'] = True
+    state['beam_size'] = 20
+    state['bleu_val_frequency'] = 5000
+    state['burn_in'] = 10000
+
+    return state
+
+def prototype_search_state_zh_en_with_shallow_LM():
+
+    state = prototype_encdec_state()
+
+    state['shallow_lm'] = True
+    state['reload_lm'] = True
+    state['cutoff'] = 1.0
+    state['hookFreq'] =400
+    state['algo'] = 'SGD_adadelta'
+    state['saveFreq'] = 30
+
+    # Source and target sentence
+    state['target']=["/data/lisatmp3/firatorh/nmt/zh-en_lm/binarized_text.en.shuf.h5"]
+    state['source']=["/data/lisatmp3/firatorh/nmt/zh-en_lm/binarized_text.zh.shuf.h5"]
+
+    # Word -> Id and Id-> Word Dictionaries
+    state['indx_word']="/data/lisatmp3/firatorh/nmt/zh-en_lm/ivocab.zh.pkl"
+    state['indx_word_target']="/data/lisatmp3/firatorh/nmt/zh-en_lm/ijoint_vocab.pkl"
+    state['word_indx']="/data/lisatmp3/firatorh/nmt/zh-en_lm/vocab.zh.pkl"
+    state['word_indx_trgt']="/data/lisatmp3/firatorh/nmt/zh-en_lm/joint_vocab.pkl"
+
+    state['source_encoding'] = 'utf8'
+
+    state['null_sym_source']=4839
+    state['null_sym_target']=30000
+
+    state['n_sym_source']=state['null_sym_source'] + 1
+    state['n_sym_target']=state['null_sym_target'] + 1
+
+    state['dec_rec_layer'] = 'RecurrentLayerWithSearch'
+    state['search'] = True
+    state['last_forward'] = False
+    state['forward'] = True
+    state['backward'] = True
+    state['seqlen'] = 50
+    state['sort_k_batches'] = 20
+    state['prefix']='/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/searchWithLM2_'
+
+    # bleu validation args
+    state['bleu_script'] = '/data/lisatmp3/firatorh/turkishParallelCorpora/iwslt14/scripts/multi-bleu.perl'
+    state['validation_set'] = '/data/lisatmp3/firatorh/nmt/zh-en_lm/dev/IWSLT14.TED.dev2010.zh-en.zh.xml.txt.trimmed'
+    state['validation_set_grndtruth'] = '/data/lisatmp3/firatorh/nmt/zh-en_lm/dev/IWSLT14.TED.dev2010.zh-en.en.tok'
+    state['validation_set_out'] = '/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/searchWithLM2_valOut.txt'
+    state['output_validation_set'] = True
+    state['beam_size'] = 20
+    state['bleu_val_frequency'] = 5000
+    state['burn_in'] = 10000
 
     return state

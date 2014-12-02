@@ -13,7 +13,9 @@ import experiments.nmt
 from experiments.nmt import\
     RNNEncoderDecoder,\
     prototype_state,\
-    parse_input
+    prototype_lm_state,\
+    parse_input,\
+    LM_builder
 
 from experiments.nmt.numpy_compat import argpartition
 
@@ -32,27 +34,43 @@ class Timer(object):
 
 class BeamSearch(object):
 
-    def __init__(self, enc_dec):
+    def __init__(self, enc_dec, aux_lm=None, eta=None):
         self.enc_dec = enc_dec
         state = self.enc_dec.state
         self.eos_id = state['null_sym_target']
         self.unk_id = state['unk_sym_target']
+        self.aux_lm = aux_lm
+        self.eta    = eta
 
     def compile(self):
         self.comp_repr = self.enc_dec.create_representation_computer()
         self.comp_init_states = self.enc_dec.create_initializers()
         self.comp_next_probs = self.enc_dec.create_next_probs_computer()
         self.comp_next_states = self.enc_dec.create_next_states_computer()
+        
+        # compile sampling and prob functions if necessary
+        if self.aux_lm:
+            self.comp_next_probs_lm = self.aux_lm.create_next_probs_computer()
+            self.comp_next_states_lm = self.aux_lm.create_next_states_computer()
 
     def search(self, seq, n_samples, ignore_unk=False, minlen=1):
         c = self.comp_repr(seq)[0]
         states = map(lambda x : x[None, :], self.comp_init_states(c))
         dim = states[0].shape[1]
 
+        # Set initial states of  the language
+        # model inside of the decoder
         states_lm = None
         if self.enc_dec.state['include_lm']:
             dim_lm = self.enc_dec.decoder.state_lm['dim']
             states_lm = numpy.zeros((1,dim_lm),dtype="float32")
+
+        # Set initial states of the auxiliary
+        # language mode, independent of decoder
+        states_aux_lm = None
+        if self.aux_lm:
+            dim_aux_lm = self.aux_lm.state['dim']
+            states_aux_lm = numpy.zeros((1,dim_aux_lm),dtype="float32")
 
         num_levels = len(states)
 
@@ -66,9 +84,15 @@ class BeamSearch(object):
             if n_samples == 0:
                 break
 
+            # reset states of the decoders language model
             new_states_lm = None
             if self.enc_dec.state['include_lm']:
                 new_states_lm = numpy.zeros((n_samples, dim_lm), dtype="float32")
+
+            # reset states of the auxiliary language model
+            new_states_aux_lm = None
+            if self.aux_lm:
+                new_states_aux_lm = numpy.zeros((n_samples, dim_aux_lm), dtype="float32")
 
             # Compute probabilities of the next words for
             # all the elements of the beam.
@@ -78,6 +102,12 @@ class BeamSearch(object):
                     else numpy.zeros(beam_size, dtype="int64"))
 
             log_probs = numpy.log(self.comp_next_probs(c, k, last_words, states_lm, *states)[0])
+
+            # get log probability given last words and previous hidden states
+            # and then fuse it with TM log probability by their geometric mean
+            if self.aux_lm:
+                log_probs_lm = numpy.log(self.comp_next_probs_lm(last_words, states_aux_lm)[0])
+                log_probs = (self.eta)*log_probs + (1-self.eta)*log_probs_lm
 
             # Adjust log probs according to search restrictions
             if ignore_unk:
@@ -113,12 +143,18 @@ class BeamSearch(object):
                     new_states[level][i] = states[level][orig_idx]
                 if self.enc_dec.state['include_lm']:
                     new_states_lm[i] = states_lm[orig_idx]
+                if self.aux_lm:
+                    new_states_aux_lm[i] = states_aux_lm[orig_idx]
                 inputs[i] = next_word
 
             if self.enc_dec.state['include_lm']:
                 new_states, new_states_lm = self.comp_next_states(c, k, inputs, new_states_lm, *new_states)
             else:
                 new_states = self.comp_next_states(c, k, inputs, new_states_lm, *new_states)
+
+            # get previous hidden states of auxiliary language model
+            if self.aux_lm:
+                new_states_aux_lm = self.comp_next_states_lm(inputs, new_states_aux_lm)[0]
 
             # Filter the sequences that end with end-of-sequence character
             trans = []
@@ -139,6 +175,9 @@ class BeamSearch(object):
                 states_lm = new_states_lm[indices]
             else:
                 states = map(lambda x : x[indices], new_states)
+
+            if self.aux_lm:
+                states_aux_lm = new_states_aux_lm[indices]
 
         # Dirty tricks to obtain any translation
         if not len(fin_trans):
@@ -238,6 +277,15 @@ def parse_args():
     parser.add_argument("changes",
             nargs="?", default="",
             help="Changes to state")
+    parser.add_argument("--lm-state",
+            default=None, 
+            help="State to use as an auxiliary LM")
+    parser.add_argument("--lm-model",
+            default=None,
+            help="Model to use as an auxiliary LM")
+    parser.add_argument("--eta",
+            default=0.5, type=float, 
+            help="Balancing parameter between TM and LM log-probs")
     return parser.parse_args()
 
 def main():
@@ -257,10 +305,24 @@ def main():
     lm_model.load(args.model_path)
     indx_word = cPickle.load(open(state['word_indx'],'rb'))
 
+    # employ language model with shallow fusion, this part is 
+    # partially unnecessary since it is only done to use load()
+    # from model, another way can be inheriting from Container 
+    aux_lm_model = None
+    if args.lm_state and args.lm_model:
+        logging.debug("Create auxiliary language model")
+        aux_lm_state = prototype_lm_state()
+        with open(args.lm_state) as lms:
+            aux_lm_state.update(cPickle.load(lms))
+        aux_lm_builder = LM_builder(aux_lm_state,rng,skip_init=True)
+        aux_lm_builder.build()
+        aux_lm_builder.lm_model = aux_lm_builder.create_lm_model()
+        aux_lm_builder.lm_model.load(args.lm_model)
+
     sampler = None
     beam_search = None
     if args.beam_search:
-        beam_search = BeamSearch(enc_dec)
+        beam_search = BeamSearch(enc_dec, aux_lm_builder, args.eta)
         beam_search.compile()
     else:
         sampler = enc_dec.create_sampler(many_samples=True)

@@ -159,7 +159,7 @@ class BleuValidator(object):
             seq, parsed_in = parse_input(self.state, self.indx_word, seqin, idx2word=self.idict_src)
 
             # draw sample, checking to ensure we don't get an empty string back
-            trans, costs, _ = sample(self.lm_model, seq, self.n_samples,
+            trans, costs, _ = sample.sample(self.lm_model, seq, self.n_samples,
                     beam_search=self.beam_search, ignore_unk=self.ignore_unk, normalize=self.normalize)
             try:
                 best = numpy.argmin(costs)
@@ -185,7 +185,7 @@ class BleuValidator(object):
                 print >> mb_subprocess.stdin, trans_out
                 if self.verbose:
                     print >> ftrans, trans_out
-         
+
             if i != 0 and i % 100 == 0:
                 print "Translated {} lines of validation set...".format(i)
             mb_subprocess.stdin.flush()
@@ -291,7 +291,7 @@ def main():
                 if state['hookFreq'] >= 0 #and state['validation_set'] is not None
                 else None)
 
-    if state['reload']:
+    if state['reload'] or state['reload_lm']:
         main.load()
     if state['loopIters'] > 0:
         main.main()

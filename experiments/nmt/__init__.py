@@ -15,8 +15,9 @@ from state import\
     prototype_phrase_state,\
     prototype_encdec_state,\
     prototype_search_state,\
-    prototype_search_state_with_LM,\
+    prototype_search_state_with_LM_tr_en,\
+    prototype_search_state_with_LM_zh_en,\
     prototype_search_state_without_LM,\
-    prototype_search_state_zh_en_with_LM,\
-    prototype_search_state_zh_en_without_LM
+    prototype_search_state_zh_en_without_LM,\
+    prototype_search_state_with_LM_TEST
 

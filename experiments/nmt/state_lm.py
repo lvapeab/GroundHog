@@ -7,7 +7,7 @@ def prototype_lm_state():
 
     #----------- DATA -----------
 
-    state['min_lr'] = float(5e-7) 
+    state['min_lr'] = float(5e-7)
 
     # TODO H5 the dataset and shuffle it
     state['target'] = '/data/lisatmp3/xukelvin/translation/fr/binarized_lm_text.fr.shuf.h5'
@@ -18,7 +18,7 @@ def prototype_lm_state():
     state['encoding'] = 'ascii'
 
     state['oov'] = 'UNK'
-    # unknown 
+    # unknown
     state['unk_sym'] = 1
     # end of sequence
     state['null_sym'] = 30000
@@ -38,18 +38,18 @@ def prototype_lm_state():
 
     state['bias'] = 0.
 
-    # TODO 
+    # TODO
     # from jointly learning to align paper
     state['rank_n_approx'] = 620
     state['dim'] = 1000
 
-    # weight noise settings 
+    # weight noise settings
     state['weight_init_fn'] = 'sample_weights_classic'
     state['weight_scale'] = 0.01
-    state['weight_noise'] = False 
+    state['weight_noise'] = False
     state['weight_noise_rec'] = False
 
-    # no noise on biases 
+    # no noise on biases
     state['no_noise_bias'] = True
 
     state['weight_noise_amount'] = 0.01
@@ -62,7 +62,7 @@ def prototype_lm_state():
     state['rec_gater'] = 'lambda x: TT.nnet.sigmoid(x)'
     state['rec_reseter'] = 'lambda x: TT.nnet.sigmoid(x)'
 
-    # related to the softmax 
+    # related to the softmax
     state['out_scale'] = .1
     state['out_bias_scale'] = -.5
     state['out_sparse'] = -1
@@ -70,7 +70,7 @@ def prototype_lm_state():
     state['activ'] = 'lambda x: TT.tanh(x)'
 
     state['rec_weight_init_fn'] = 'sample_weights_orth'
-    state['rec_weight_scale'] = 1.    
+    state['rec_weight_scale'] = 1.
 
     state['check_first_word'] = True
     state['eps'] = 1e-10
@@ -120,7 +120,7 @@ def prototype_lm_state():
     state['trainFreq'] = 10
     # Frequency of running hooks
     state['sampling_seed'] = 5
-    state['hookFreq'] = 1000 
+    state['hookFreq'] = 1000
     # Validation frequency
     state['validFreq'] = 500
     # Model saving frequency (in minutes)
@@ -143,22 +143,22 @@ def prototype_lm_state_en():
     state['indx_word'] = '/data/lisatmp3/firatorh/turkishParallelCorpora/iwslt14/tr-en_lm/ijoint_vocab.pkl'
     state['word_indx'] = '/data/lisatmp3/firatorh/turkishParallelCorpora/iwslt14/tr-en_lm/joint_vocab.pkl'
 
-    # index of 'the' in english 
+    # index of 'the' in english
     state['sampling_seed'] = 4
 
-    state['prefix'] = 'lm_'
+    state['prefix'] = '/data/lisatmp3/firatorh/nmt/en_lm/lm_'
 
     return state
 
-def prototype_lm_state_tr():    
+def prototype_lm_state_tr():
     state = prototype_lm_state()
     state['target'] = '/data/lisatmp3/firatorh/languageModelling/corpora/tr_lm/train/binarized_text.tr.h5'
-    
+
     state['indx_word'] = '/data/lisatmp3/firatorh/languageModelling/corpora/tr_lm/ivocab.pkl'
     state['word_indx'] = '/data/lisatmp3/firatorh/languageModelling/corpora/tr_lm/vocab.pkl'
-    
+
     state['sampling_seed'] = 4
-    
-    state['prefix'] = 'trLM_'
-    
+
+    state['prefix'] = '/data/lisatmp3/firatorh/nmt/tr_lm/trLM_'
+
     return state
