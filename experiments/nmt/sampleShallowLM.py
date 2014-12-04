@@ -34,20 +34,21 @@ class Timer(object):
 
 class BeamSearch(object):
 
-    def __init__(self, enc_dec, aux_lm=None, eta=None):
+    def __init__(self, enc_dec, aux_lm=None, eta=None, score=False):
         self.enc_dec = enc_dec
         state = self.enc_dec.state
         self.eos_id = state['null_sym_target']
         self.unk_id = state['unk_sym_target']
         self.aux_lm = aux_lm
         self.eta    = eta
+        self.score = score
 
     def compile(self):
         self.comp_repr = self.enc_dec.create_representation_computer()
         self.comp_init_states = self.enc_dec.create_initializers()
         self.comp_next_probs = self.enc_dec.create_next_probs_computer()
         self.comp_next_states = self.enc_dec.create_next_states_computer()
-        
+
         # compile sampling and prob functions if necessary
         if self.aux_lm:
             self.comp_next_probs_lm = self.aux_lm.create_next_probs_computer()
@@ -71,6 +72,11 @@ class BeamSearch(object):
         if self.aux_lm:
             dim_aux_lm = self.aux_lm.state['dim']
             states_aux_lm = numpy.zeros((1,dim_aux_lm),dtype="float32")
+        if self.score:
+            score_lm = [[]]
+            score_tm = [[]]
+            fin_score_lm = []
+            fin_score_tm = []
 
         num_levels = len(states)
 
@@ -101,13 +107,15 @@ class BeamSearch(object):
                     if k > 0
                     else numpy.zeros(beam_size, dtype="int64"))
 
-            log_probs = numpy.log(self.comp_next_probs(c, k, last_words, states_lm, *states)[0])
+            log_probs_tm = numpy.log(self.comp_next_probs(c, k, last_words, states_lm, *states)[0])
 
             # get log probability given last words and previous hidden states
             # and then fuse it with TM log probability by their geometric mean
             if self.aux_lm:
                 log_probs_lm = numpy.log(self.comp_next_probs_lm(last_words, states_aux_lm)[0])
-                log_probs = (self.eta)*log_probs + (1-self.eta)*log_probs_lm
+                log_probs = (self.eta)*log_probs_tm + (1-self.eta)*log_probs_lm
+            else:
+                log_probs = log_probs_lm
 
             # Adjust log probs according to search restrictions
             if ignore_unk:
@@ -129,6 +137,11 @@ class BeamSearch(object):
             word_indices = best_costs_indices % voc_size
             costs = flat_next_costs[best_costs_indices]
 
+            if self.score:
+                new_score_lm = [[]] * n_samples
+                new_score_tm = [[]] * n_samples
+
+            #import ipdb; ipdb.set_trace()
             # Form a beam for the next iteration
             new_trans = [[]] * n_samples
             new_costs = numpy.zeros(n_samples)
@@ -145,6 +158,9 @@ class BeamSearch(object):
                     new_states_lm[i] = states_lm[orig_idx]
                 if self.aux_lm:
                     new_states_aux_lm[i] = states_aux_lm[orig_idx]
+                if self.score:
+                    new_score_lm[i] = score_lm[orig_idx] + [log_probs_lm[orig_idx][next_word]]
+                    new_score_tm[i] = score_tm[orig_idx] + [log_probs_tm[orig_idx][next_word]]
                 inputs[i] = next_word
 
             if self.enc_dec.state['include_lm']:
@@ -156,6 +172,10 @@ class BeamSearch(object):
             if self.aux_lm:
                 new_states_aux_lm = self.comp_next_states_lm(inputs, new_states_aux_lm)[0]
 
+            if self.score:
+                score_lm = []
+                score_tm = []
+
             # Filter the sequences that end with end-of-sequence character
             trans = []
             costs = []
@@ -165,10 +185,16 @@ class BeamSearch(object):
                     trans.append(new_trans[i])
                     costs.append(new_costs[i])
                     indices.append(i)
+                    if self.score:
+                        score_lm.append(new_score_lm[i])
+                        score_tm.append(new_score_tm[i])
                 else:
                     n_samples -= 1
                     fin_trans.append(new_trans[i])
                     fin_costs.append(new_costs[i])
+                    if self.score:
+                        fin_score_lm.append(new_score_lm[i])
+                        fin_score_tm.append(new_score_tm[i])
 
             if self.enc_dec.state['include_lm']:
                 states = map(lambda x : x[indices], [new_states])
@@ -189,10 +215,11 @@ class BeamSearch(object):
                 return self.search(seq, n_samples * 2, False, minlen)
             else:
                 logger.error("Translation failed")
-
+        LM_score = numpy.array([numpy.sum(f,axis=0) for f in fin_score_lm])[numpy.argsort(fin_costs)]
+        TM_score = numpy.array([numpy.sum(f,axis=0) for f in fin_score_tm])[numpy.argsort(fin_costs)]
         fin_trans = numpy.array(fin_trans)[numpy.argsort(fin_costs)]
         fin_costs = numpy.array(sorted(fin_costs))
-        return fin_trans, fin_costs
+        return fin_trans, fin_costs, LM_score, TM_score
 
 def indices_to_words(i2w, seq):
     sen = []
@@ -208,7 +235,7 @@ def sample(lm_model, seq, n_samples,
         alpha=1, verbose=False):
     if beam_search:
         sentences = []
-        trans, costs = beam_search.search(seq, n_samples,
+        trans, costs, score_lm, score_tm = beam_search.search(seq, n_samples,
                 ignore_unk=ignore_unk, minlen=len(seq) / 2)
         if normalize:
             counts = [len(s) for s in trans]
@@ -218,7 +245,8 @@ def sample(lm_model, seq, n_samples,
             sentences.append(" ".join(sen))
         for i in range(len(costs)):
             if verbose:
-                print "{}: {}".format(costs[i], sentences[i])
+                print "{}: {} - lmScore[{}] tmScore[{}]".format(costs[i],
+                        sentences[i],score_lm[i],score_tm[i])
         return sentences, costs, trans
     elif sampler:
         sentences = []
@@ -278,14 +306,16 @@ def parse_args():
             nargs="?", default="",
             help="Changes to state")
     parser.add_argument("--lm-state",
-            default=None, 
+            default=None,
             help="State to use as an auxiliary LM")
     parser.add_argument("--lm-model",
             default=None,
             help="Model to use as an auxiliary LM")
     parser.add_argument("--eta",
-            default=0.5, type=float, 
+            default=0.5, type=float,
             help="Balancing parameter between TM and LM log-probs")
+    parser.add_argument("--score", action="store_true",
+            default=False, help="Score translations by auxiliary language model")
     return parser.parse_args()
 
 def main():
@@ -305,10 +335,10 @@ def main():
     lm_model.load(args.model_path)
     indx_word = cPickle.load(open(state['word_indx'],'rb'))
 
-    # employ language model with shallow fusion, this part is 
+    # employ language model with shallow fusion, this part is
     # partially unnecessary since it is only done to use load()
-    # from model, another way can be inheriting from Container 
-    aux_lm_model = None
+    # from model, another way can be inheriting from Container
+    aux_lm_builder = None
     if args.lm_state and args.lm_model:
         logging.debug("Create auxiliary language model")
         aux_lm_state = prototype_lm_state()
@@ -322,13 +352,12 @@ def main():
     sampler = None
     beam_search = None
     if args.beam_search:
-        beam_search = BeamSearch(enc_dec, aux_lm_builder, args.eta)
+        beam_search = BeamSearch(enc_dec, aux_lm_builder, args.eta, args.score)
         beam_search.compile()
     else:
         sampler = enc_dec.create_sampler(many_samples=True)
 
     idict_src = cPickle.load(open(state['indx_word'],'r'))
-
     if args.source and args.trans:
         # Actually only beam search is currently supported here
         assert beam_search
@@ -352,7 +381,8 @@ def main():
             if args.verbose:
                 print "Parsed Input:", parsed_in
             trans, costs, _ = sample(lm_model, seq, n_samples, sampler=sampler,
-                    beam_search=beam_search, ignore_unk=args.ignore_unk, normalize=args.normalize)
+                    beam_search=beam_search, ignore_unk=args.ignore_unk,
+                    normalize=args.normalize, verbose=args.verbose)
             best = numpy.argmin(costs)
             if state['target_encoding'] == 'utf8':
                 print >>ftrans, trans[best].encode('utf8').replace(" ","")
