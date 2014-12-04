@@ -383,7 +383,7 @@ class LM_builder(object):
 
         self.train_model = self.output_layer(self.rec_layer).train(target=self.y,
                 mask=self.y_mask)
-        
+
         # additional variables for beam-search
         self.gen_y = TT.lvector("gen_y")
         self.current_states = TT.matrix("cur_lm")
@@ -432,9 +432,9 @@ class LM_builder(object):
     def build_for_auxiliary_lm(self, x, prev_hid):
         """
         Build Computational Graph to be used in the beam-search
-        as an auxiliary language model to translation model 
+        as an auxiliary language model to translation model
         """
-        
+
         x_emb = self.emb_words(x, no_noise_bias=self.state['no_noise_bias'])
 
         x_input = self.inputer(x_emb)
@@ -449,13 +449,16 @@ class LM_builder(object):
                               gater_below=none_if_zero(update_signals),
                               reseter_below=none_if_zero(reset_signals))
 
-        return [self.output_layer(
+        rval1 = self.output_layer(
                     state_below=rec_result,
-                    temp=1).out] + [rec_result]
+                    temp=1).out
+        rval2 = rec_result
+
+        return [rval1, rval2]
 
     def create_next_probs_computer(self):
         """
-        Compile theano function to get the log probability 
+        Compile theano function to get the log probability
         """
         self.lm_next_probs_fn = theano.function(
                 inputs=[self.gen_y, self.current_states],
@@ -466,7 +469,7 @@ class LM_builder(object):
 
     def create_next_states_computer(self):
         """
-        Compile theano function to get the hidden state 
+        Compile theano function to get the hidden state
         """
         self.lm_next_states_fn = theano.function(
                 inputs=[self.gen_y, self.current_states],
@@ -474,7 +477,7 @@ class LM_builder(object):
                                                      self.current_states)[1]],
                 name="lm_next_states_fn",on_unused_input='warn')
         return self.lm_next_states_fn
-        
+
     def create_lm_model(self):
         """
         Create an LM_model with language model(!)
@@ -517,9 +520,10 @@ if __name__ == '__main__':
     rng = numpy.random.RandomState(state['seed'])
 
     train_data = get_batch_iterator(state)
-    train_data.start()
+    #train_data.start()
     model = LM_builder(state, rng, skip_init=True
                        if state['reload'] else False)
+    logger.debug("Building language model")
     model.build()
 
     #TODO
