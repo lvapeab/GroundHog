@@ -1236,6 +1236,8 @@ class Decoder(EncoderDecoderBase):
                     if self.state['check_first_word']
                     else TT.ones((y.shape[0]), dtype="float32"))
                 readout += TT.shape_padright(check_first_word) * self.lm_embedder(lm_hidden_state).out
+                lm_hidden_state = TT.switch(check_first_word[:,None], lm_hidden_state, 0. *
+                        lm_hidden_state)
             else:
                 if y.ndim == 1:
                     readout += Shift()(self.lm_embedder(lm_hidden_state).reshape(
