@@ -256,23 +256,23 @@ def binarize_aux():
                              dtype='uint16')
     total_ngram_count = 0
     base_filename = os.path.basename(args.auxiliary_text)
-    logger.info("Binarizing %s." % (base_filename))    
+    logger.info("Binarizing %s." % (base_filename))
     binarized_corpus = []
     unk_count = 0
     fin  = open(args.auxiliary_text,'r')
-    
+
     # read line
     while 1:
 
         sentence = fin.readline()
         if not sentence:
             break
-    
+
         words = sentence.strip().split(' ')
         binarized_sentence = [vocab.get(word, 1) for word in words]
         binarized_corpus.append(binarized_sentence)
         unk_count += binarized_sentence.count(1)
-        
+
     fin.close()
     # endfor sentence in input_file
     logger.info("#Unknown words in auxilary-file %d." % (unk_count))

@@ -104,6 +104,8 @@ def prototype_lm_state():
     state['prefix'] = '/data/lisatmp3/xukelvin/translation/fr_lm/lm_'
     # Specifies whether old model should be reloaded first
     state['reload'] = False
+    # This relates to joint lm/tm training
+    state['reload_lm'] = False
     # When set to 0 each new model dump will be saved in a new file
     state['overwrite'] = 1
 
@@ -138,15 +140,15 @@ def prototype_lm_state():
 
 def prototype_lm_state_en():
     state = prototype_lm_state()
-    state['target'] = '/data/lisatmp3/xukelvin/translation/en_lm/binarized_wiki.en.shuf.h5'
+    state['target'] = '/data/lisatmp3/firatorh/nmt/en_lm/test/binarized_wiki.en.shuf.h5'
 
-    state['indx_word'] = '/data/lisatmp3/firatorh/turkishParallelCorpora/iwslt14/tr-en_lm/ijoint_vocab.pkl'
-    state['word_indx'] = '/data/lisatmp3/firatorh/turkishParallelCorpora/iwslt14/tr-en_lm/joint_vocab.pkl'
+    state['indx_word'] = '/data/lisatmp3/firatorh/nmt/en_lm/test/ijoint_vocab.pkl'
+    state['word_indx'] = '/data/lisatmp3/firatorh/nmt/en_lm/test/joint_vocab.pkl'
 
     # index of 'the' in english
     state['sampling_seed'] = 4
 
-    state['prefix'] = '/data/lisatmp3/firatorh/nmt/en_lm/lm_'
+    state['prefix'] = '/data/lisatmp3/firatorh/nmt/en_lm/test/lm_'
 
     return state
 
@@ -162,3 +164,22 @@ def prototype_lm_state_tr():
     state['prefix'] = '/data/lisatmp3/firatorh/nmt/tr_lm/trLM_'
 
     return state
+
+def prototype_lm_state_en_finetune():
+    state = prototype_lm_state()
+    state['target']='/data/lisatmp3/firatorh/nmt/en_lm/finetune/binarized_iwlst.en.shuf.h5'
+
+    state['indx_word'] = '/data/lisatmp3/firatorh/nmt/en_lm/finetune/ijoint_vocab.pkl'
+    state['word_indx'] = '/data/lisatmp3/firatorh/nmt/en_lm/finetune/joint_vocab.pkl'
+
+    # index of 'the' in english
+    state['sampling_seed'] = 4
+
+    state['algo'] = 'SGD_rmsprop'
+    state['lr'] = 1e-3
+    state['bs'] = 128
+
+    state['prefix'] = '/data/lisatmp3/firatorh/nmt/en_lm/finetune/lm_v2_'
+
+    return state
+
