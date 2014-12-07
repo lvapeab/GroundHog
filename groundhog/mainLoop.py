@@ -249,14 +249,14 @@ class MainLoop(object):
     def load(self, model_path=None, timings_path=None):
         if model_path is None:
             model_path = self.state['prefix'] + 'model.npz'
-        if timings_path is None and not(self.state['reload_lm']):
+        if timings_path is None:
             timings_path = self.state['prefix'] + 'timing.npz'
         try:
             self.model.load(model_path)
         except Exception:
             print 'mainLoop: Corrupted model file'
             traceback.print_exc()
-        if not(self.state['reload_lm']):
+        if not(self.state['reload_lm']) or self.state['reload']:
             try:
                 self.timings = dict(numpy.load(timings_path).iteritems())
             except Exception:

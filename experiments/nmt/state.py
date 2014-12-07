@@ -377,7 +377,7 @@ def prototype_search_state_with_LM_tr_en():
     state['output_validation_set'] = True
     state['beam_size'] = 20
     state['bleu_val_frequency'] = 5000
-    state['burn_in'] = 10000
+    state['validation_burn_in'] = 10000
 
     return state
 
@@ -450,7 +450,7 @@ def prototype_search_state_with_LM_zh_en():
     state['output_validation_set'] = True
     state['beam_size'] = 20
     state['bleu_val_frequency'] = 5000
-    state['burn_in'] = 10000
+    state['validation_burn_in'] = 10000
 
     return state
 
@@ -480,6 +480,8 @@ def prototype_search_state_zh_en_without_LM():
 
     state['include_lm'] = False
     state['reload_lm'] = False
+    state['train_only_readout'] = False
+
     state['cutoff'] = 1.0
     state['hookFreq'] =400
     state['algo'] = 'SGD_adadelta'
@@ -512,6 +514,16 @@ def prototype_search_state_zh_en_without_LM():
     state['sort_k_batches'] = 20
     state['prefix']='/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/searchWithoutLM_'
 
+    # bleu validation args
+    state['bleu_script'] = '/data/lisatmp3/firatorh/turkishParallelCorpora/iwslt14/scripts/multi-bleu.perl'
+    state['validation_set'] = '/data/lisatmp3/firatorh/nmt/zh-en_lm/dev/IWSLT14.TED.dev2010.zh-en.zh.xml.txt.trimmed'
+    state['validation_set_grndtruth'] = '/data/lisatmp3/firatorh/nmt/zh-en_lm/dev/IWSLT14.TED.dev2010.zh-en.en.tok'
+    state['validation_set_out']='/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/searchWithoutLM_valOut.txt'
+    state['output_validation_set'] = True
+    state['beam_size'] = 20
+    state['bleu_val_frequency'] = 500
+    state['validation_burn_in'] = 0
+
     return state
 
 def prototype_search_state_tr_en_with_shallow_LM():
@@ -540,7 +552,7 @@ def prototype_search_state_tr_en_with_shallow_LM():
     state['output_validation_set'] = True
     state['beam_size'] = 20
     state['bleu_val_frequency'] = 5000
-    state['burn_in'] = 10000
+    state['validation_burn_in'] = 10000
 
     return state
 
@@ -590,6 +602,102 @@ def prototype_search_state_zh_en_with_shallow_LM():
     state['output_validation_set'] = True
     state['beam_size'] = 20
     state['bleu_val_frequency'] = 5000
-    state['burn_in'] = 10000
+    state['validation_burn_in'] = 10000
+
+    return state
+
+def prototype_search_state_with_LM_tr_en_finetune():
+
+    state = prototype_encdec_state()
+
+    state['include_lm'] = True
+    state['reload_lm'] = True
+    state['train_only_readout'] = True
+
+    state['cutoff'] = 1.0
+    state['hookFreq'] =400
+    state['saveFreq'] = 30
+
+    state['dec_rec_layer'] = 'RecurrentLayerWithSearch'
+    state['search'] = True
+    state['last_forward'] = False
+    state['forward'] = True
+    state['backward'] = True
+    state['seqlen'] = 50
+    state['sort_k_batches'] = 20
+    state['prefix']='/data/lisatmp3/firatorh/nmt/tr-en_lm/trainedModels/finetune/combined0_'
+
+    state['bleu_script'] = '/data/lisatmp3/firatorh/turkishParallelCorpora/iwslt14/scripts/multi-bleu.perl'
+    state['validation_set'] = '/data/lisatmp3/firatorh/nmt/tr-en_lm/dev/IWSLT14.TED.dev2010.tr-en.tr.tok.seg'
+    state['validation_set_grndtruth'] = '/data/lisatmp3/firatorh/nmt/tr-en_lm/dev/IWSLT14.TED.dev2010.tr-en.en.tok'
+    state['validation_set_out'] ='/data/lisatmp3/firatorh/nmt/tr-en_lm/trainedModels/finetune/searchWithLMfinetune_valOut.txt'
+    state['output_validation_set'] = True
+    state['beam_size'] = 20
+    state['bleu_val_frequency'] = 200
+    state['validation_burn_in'] = 0
+
+    return state
+
+def prototype_search_state_with_LM_tr_en_SANITY_CHECK():
+
+    state = prototype_encdec_state()
+
+    state['include_lm'] = True
+    state['reload_lm'] = True
+
+    state['cutoff'] = 1.0
+    state['hookFreq'] =400
+    state['saveFreq'] = 30
+
+    state['dec_rec_layer'] = 'RecurrentLayerWithSearch'
+    state['search'] = True
+    state['last_forward'] = False
+    state['forward'] = True
+    state['backward'] = True
+    state['seqlen'] = 50
+    state['sort_k_batches'] = 20
+    state['prefix']='/data/lisatmp3/firatorh/nmt/tr-en_lm/outputs/sanityCheck/searchWithZeroLM_'
+
+    state['bleu_script'] = '/data/lisatmp3/firatorh/turkishParallelCorpora/iwslt14/scripts/multi-bleu.perl'
+    state['validation_set'] = '/data/lisatmp3/firatorh/nmt/tr-en_lm/dev/IWSLT14.TED.dev2010.tr-en.tr.tok.seg'
+    state['validation_set_grndtruth'] = '/data/lisatmp3/firatorh/nmt/tr-en_lm/dev/IWSLT14.TED.dev2010.tr-en.en.tok'
+    state['validation_set_out']='/data/lisatmp3/firatorh/nmt/tr-en_lm/outputs/sanityCheck/searchWithZeroLM_valOut.txt'
+    state['output_validation_set'] = True
+    state['beam_size'] = 20
+    state['bleu_val_frequency'] = 1000
+    state['validation_burn_in'] = 0
+
+    return state
+
+def prototype_search_state_with_LM_tr_en_MASK():
+
+    state = prototype_encdec_state()
+
+    state['include_lm'] = True
+    state['reload_lm'] = True
+    state['mask_first_lm'] = True
+    state['train_only_readout'] = True
+
+    state['cutoff'] = 1.0
+    state['hookFreq'] =400
+    state['saveFreq'] = 30
+
+    state['dec_rec_layer'] = 'RecurrentLayerWithSearch'
+    state['search'] = True
+    state['last_forward'] = False
+    state['forward'] = True
+    state['backward'] = True
+    state['seqlen'] = 50
+    state['sort_k_batches'] = 20
+    state['prefix']='/data/lisatmp3/firatorh/nmt/tr-en_lm/outputs/masking/combined0_'
+
+    state['bleu_script'] = '/data/lisatmp3/firatorh/turkishParallelCorpora/iwslt14/scripts/multi-bleu.perl'
+    state['validation_set'] = '/data/lisatmp3/firatorh/nmt/tr-en_lm/dev/IWSLT14.TED.dev2010.tr-en.tr.tok.seg'
+    state['validation_set_grndtruth'] = '/data/lisatmp3/firatorh/nmt/tr-en_lm/dev/IWSLT14.TED.dev2010.tr-en.en.tok'
+    state['validation_set_out']='/data/lisatmp3/firatorh/nmt/tr-en_lm/outputs/masking/combined0_valOut.txt'
+    state['output_validation_set'] = True
+    state['beam_size'] = 20
+    state['bleu_val_frequency'] = 5000
+    state['validation_burn_in'] = 0
 
     return state

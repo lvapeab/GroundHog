@@ -61,7 +61,6 @@ class BeamSearch(object):
 
         trans = [[]]
         costs = [0.0]
-
         for k in range(3 * len(seq)):
             if n_samples == 0:
                 break
@@ -146,6 +145,7 @@ class BeamSearch(object):
                 logger.warning("Did not manage without UNK")
                 return self.search(seq, n_samples, False, minlen)
             elif n_samples < 500:
+                import ipdb; ipdb.set_trace()
                 logger.warning("Still no translations: try beam size {}".format(n_samples * 2))
                 return self.search(seq, n_samples * 2, False, minlen)
             else:

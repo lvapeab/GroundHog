@@ -162,7 +162,7 @@ class BeamSearch(object):
                     new_score_lm[i] = score_lm[orig_idx] + [log_probs_lm[orig_idx][next_word]]
                     new_score_tm[i] = score_tm[orig_idx] + [log_probs_tm[orig_idx][next_word]]
                 inputs[i] = next_word
-
+            import ipdb; ipdb.set_trace()
             if self.enc_dec.state['include_lm']:
                 new_states, new_states_lm = self.comp_next_states(c, k, inputs, new_states_lm, *new_states)
             else:

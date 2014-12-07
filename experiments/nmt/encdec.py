@@ -29,7 +29,8 @@ import groundhog.utils as utils
 from experiments.nmt import \
         LM_builder,\
         prototype_lm_state,\
-        prototype_lm_state_en
+        prototype_lm_state_en,\
+        prototype_lm_state_en_finetune
 
 logger = logging.getLogger(__name__)
 
@@ -850,7 +851,8 @@ class Decoder(EncoderDecoderBase):
 
         # should we really keep these separate?
         if self.state['include_lm']:
-            self.state_lm = prototype_lm_state_en()
+            self.state_lm = prototype_lm_state_en_finetune()
+            #self.state_lm = prototype_lm_state_en()
 
         # Actually there is a problem here -
         # we don't make difference between number of input layers
@@ -886,7 +888,7 @@ class Decoder(EncoderDecoderBase):
                     self.decode_updaters[0])
 
     def _create_lm(self):
-        logger.debug("Creating language model")
+        logger.debug("Creating External language model")
         self.LM_builder = LM_builder(self.state_lm, self.rng, skip_init=False)
         # build output refers to the softmax over words
         self.LM_builder.__create_layers__(build_output=False)
@@ -943,6 +945,9 @@ class Decoder(EncoderDecoderBase):
                         **decoding_kwargs)
 
     def _create_readout_layers(self):
+        # created if we want to tune just the readout layer
+        self.readout_params = []
+
         softmax_layer = self.state['softmax_layer'] if 'softmax_layer' in self.state \
                         else 'SoftmaxLayer'
 
@@ -961,6 +966,8 @@ class Decoder(EncoderDecoderBase):
                 name='{}_repr_readout'.format(self.prefix),
                 **readout_kwargs)
 
+        self.readout_params += self.repr_readout.params
+
         # Attention - this is the only readout layer
         # with trainable bias. Should be careful with that.
         self.hidden_readouts = [None] * self.num_levels
@@ -970,6 +977,7 @@ class Decoder(EncoderDecoderBase):
                 n_in=self.state['dim'],
                 name='{}_hid_readout_{}'.format(self.prefix, level),
                 **readout_kwargs)
+            self.readout_params += self.hidden_readouts[level].params
 
         self.prev_word_readout = 0
         if self.state['bigram']:
@@ -981,6 +989,7 @@ class Decoder(EncoderDecoderBase):
                 learn_bias=False,
                 name='{}_prev_readout_{}'.format(self.prefix, level),
                 **self.default_kwargs)
+            self.readout_params += self.prev_word_readout.params
 
         if self.state['include_lm']:
             self.lm_embedder = MultiLayer(
@@ -991,6 +1000,7 @@ class Decoder(EncoderDecoderBase):
                 learn_bias=False,
                 name='{}_lm_embed_{}'.format(self.prefix, level),
                 **self.default_kwargs)
+            self.readout_params += self.lm_embedder.params
 
         if self.state['deep_out']:
             act_layer = UnaryOp(activation=eval(self.state['unary_activ']))
@@ -1005,6 +1015,9 @@ class Decoder(EncoderDecoderBase):
                     name='{}_deep_softmax'.format(self.prefix),
                     use_nce=self.state['use_nce'] if 'use_nce' in self.state else False,
                     **self.default_kwargs)
+            self.readout_params += act_layer.params
+            self.readout_params += drop_layer.params
+            self.readout_params += self.output_layer.params
         else:
             self.output_nonlinearities = []
             self.output_layer = eval(softmax_layer)(
@@ -1017,6 +1030,7 @@ class Decoder(EncoderDecoderBase):
                     sum_over_time=True,
                     use_nce=self.state['use_nce'] if 'use_nce' in self.state else False,
                     **self.default_kwargs)
+            self.readout_params += self.output_layer.params
 
     def build_decoder(self, c, y,
             c_mask=None,
@@ -1231,27 +1245,40 @@ class Decoder(EncoderDecoderBase):
         # todo, add language model
         if self.state['include_lm']:
             lm_hidden_state = self.LM_builder.build_for_translation(y, y_mask, prev_hid=prev_hid)
+            check_first_word = (y > 0
+                if self.state['check_first_word']
+                else TT.ones((y.shape[0]), dtype="float32"))
             if mode != Decoder.EVALUATION:
-                check_first_word = (y > 0
-                    if self.state['check_first_word']
-                    else TT.ones((y.shape[0]), dtype="float32"))
                 readout += TT.shape_padright(check_first_word) * self.lm_embedder(lm_hidden_state).out
-                lm_hidden_state = TT.switch(check_first_word[:,None], lm_hidden_state, 0. *
-                        lm_hidden_state)
+                if self.state['mask_first_lm']:
+                    lm_hidden_state = TT.switch(check_first_word[:,None], lm_hidden_state, 0. *
+                            lm_hidden_state)
             else:
-                if y.ndim == 1:
-                    readout += Shift()(self.lm_embedder(lm_hidden_state).reshape(
-                        (y.shape[0], 1, self.state['dim'])))
+                if self.state['mask_first_lm']:
+                    lm_readout = self.lm_embedder(lm_hidden_state)
+                    # We will do masking for the first step by shifting
+                    # lm_readout to left and then right one time step each
+                    if y.ndim == 1:
+                        lm_readout = Shift()(Shift(-1)(lm_readout.reshape(
+                            (y.shape[0], 1, self.state['dim']))))
+                    else:
+                        lm_readout = Shift()(Shift(-1)(lm_readout.reshape(
+                            (y.shape[0], y.shape[1], self.state['dim'])))).reshape(
+                                    readout.out.shape)
+                    readout += lm_readout
                 else:
-                    # This place needs explanation. When prev_word_readout is applied to
-                    # approx_embeddings the resulting shape is
-                    # (n_batches * sequence_length, repr_dimensionality). We first
-                    # transform it into 3D tensor to shift forward in time. Then
-                    # reshape it back.
-                    readout += Shift()(self.lm_embedder(lm_hidden_state).reshape(
-                        (y.shape[0], y.shape[1], self.state['dim']))).reshape(
-                                readout.out.shape)
-
+                    if y.ndim == 1:
+                        readout += Shift()(self.lm_embedder(lm_hidden_state).reshape(
+                            (y.shape[0], 1, self.state['dim'])))
+                    else:
+                        # This place needs explanation. When prev_word_readout is applied to
+                        # approx_embeddings the resulting shape is
+                        # (n_batches * sequence_length, repr_dimensionality). We first
+                        # transform it into 3D tensor to shift forward in time. Then
+                        # reshape it back.
+                        readout += Shift()(self.lm_embedder(lm_hidden_state).reshape(
+                            (y.shape[0], y.shape[1], self.state['dim']))).reshape(
+                                    readout.out.shape)
 
         for fun in self.output_nonlinearities:
             readout = fun(readout)
@@ -1391,6 +1418,10 @@ class RNNEncoderDecoder(object):
             self.state['include_lm'] = False
         if 'shallow_lm' not in self.state:
             self.state['shallow_lm'] = False
+        if 'train_only_readout' not in self.state:
+            self.state['train_only_readout'] = False
+        if 'mask_first_lm' not in self.state:
+            self.state['mask_first_lm'] = False
 
     def build(self):
         logger.debug("Create input variables")
@@ -1492,7 +1523,6 @@ class RNNEncoderDecoder(object):
         #if self.state['include_lm']:
         self.current_states_lm = TT.matrix("cur_lm")
 
-    # note we are calling this a lm, when really it is a translation model
     def create_lm_model(self):
         # singleton constructor
         if hasattr(self, 'lm_model'):
@@ -1501,7 +1531,21 @@ class RNNEncoderDecoder(object):
         # weights and optionally its embedding matrix
         excluded_params = None
         if hasattr(self.decoder, 'excluded_params'):
-            excluded_params = self.decoder.excluded_params
+            if self.state['train_only_readout']:
+                # exclude the union of the NON-readout parameters and the whole graph (this
+                # accounts for lm params) + the embeddings (leave these)
+                # self.prediction.params are all the parameter
+                excluded_params = list((set(self.predictions.params) - set(self.decoder.readout_params))\
+                                     | set(self.decoder.approx_embedder.params))
+            # just exclude the language model
+            else:
+                excluded_params = self.decoder.excluded_params
+            # verbose for debugging purposes
+            logger.debug("Excluding these params for training:")
+            print excluded_params
+            logger.debug("Training these params:")
+            print list(set(self.predictions.params)-set(excluded_params))
+
         self.lm_model = LM_Model(
             cost_layer=self.predictions,
             sample_fn=self.create_sampler(),
@@ -1514,6 +1558,7 @@ class RNNEncoderDecoder(object):
         logger.debug("Model params:\n{}".format(
             pprint.pformat(sorted([p.name for p in self.lm_model.params]))))
         return self.lm_model
+
 
     def create_representation_computer(self):
         if not hasattr(self, "repr_fn"):

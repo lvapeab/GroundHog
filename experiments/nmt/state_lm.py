@@ -179,7 +179,7 @@ def prototype_lm_state_en_finetune():
     state['lr'] = 1e-3
     state['bs'] = 128
 
-    state['prefix'] = '/data/lisatmp3/firatorh/nmt/en_lm/finetune/lm_v2_'
+    state['prefix']='/data/lisatmp3/firatorh/nmt/tr-en_lm/outputs/masking/finetuned_lm_model.npz'
 
     return state
 
