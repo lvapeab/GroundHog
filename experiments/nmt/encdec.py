@@ -30,7 +30,8 @@ from experiments.nmt import \
         LM_builder,\
         prototype_lm_state,\
         prototype_lm_state_en,\
-        prototype_lm_state_en_finetune
+        prototype_lm_state_en_finetune,\
+        prototype_lm_state_en_finetune_union
 
 logger = logging.getLogger(__name__)
 
@@ -851,7 +852,8 @@ class Decoder(EncoderDecoderBase):
 
         # should we really keep these separate?
         if self.state['include_lm']:
-            self.state_lm = prototype_lm_state_en_finetune()
+            self.state_lm = prototype_lm_state_en_finetune_union()
+            #self.state_lm = prototype_lm_state_en_finetune()
             #self.state_lm = prototype_lm_state_en()
 
         # Actually there is a problem here -
@@ -893,6 +895,18 @@ class Decoder(EncoderDecoderBase):
         # build output refers to the softmax over words
         self.LM_builder.__create_layers__(build_output=False)
         self.excluded_params = self.LM_builder.get_const_params()
+        
+        # controller mlp for external language model, 
+        # generates a scaler btw [0,1] to weight language
+        # model path, and conditioned on hidden_state_lm
+        self.lm_controller = MultiLayer(
+                    self.rng,
+                    n_in=self.state_lm['dim'],
+                    n_hids=[self.state['dim'], 1],
+                    activation=['lambda x: TT.tanh(x)', 'lambda x: TT.nnet.sigmoid(x)'],
+                    bias_scale=[self.state['bias']]*2,
+                    name='lm_controller')
+        self.readout_params += self.lm_controller.params
 
     def _create_initialization_layers(self):
         logger.debug("_create_initialization_layers")
@@ -1242,43 +1256,33 @@ class Decoder(EncoderDecoderBase):
                         (y.shape[0], y.shape[1], self.state['dim']))).reshape(
                                 readout.out.shape)
 
-        # todo, add language model
+        # add language model, for evaluation lm_hidden_state is shifted forward in time 
+        # for one step and then multiplied by alpha. For sampling and search, 
+        # lm_hidden_state is zeroed if predicted word is 0 and then multiplied by alpha
+        # This snippet is uggly
         if self.state['include_lm']:
             lm_hidden_state = self.LM_builder.build_for_translation(y, y_mask, prev_hid=prev_hid)
             check_first_word = (y > 0
                 if self.state['check_first_word']
                 else TT.ones((y.shape[0]), dtype="float32"))
             if mode != Decoder.EVALUATION:
-                readout += TT.shape_padright(check_first_word) * self.lm_embedder(lm_hidden_state).out
-                if self.state['mask_first_lm']:
-                    lm_hidden_state = TT.switch(check_first_word[:,None], lm_hidden_state, 0. *
-                            lm_hidden_state)
+                lm_hidden_state = TT.switch(check_first_word[:,None],
+                                            lm_hidden_state, 0. * lm_hidden_state)
+                lm_alpha = self.lm_controller(lm_hidden_state)
+                readout_lm = TT.shape_padright(check_first_word) * self.lm_embedder(lm_hidden_state).out
+                readout_lm = (lm_alpha.reshape([readout_lm.shape[0]])[:,None] * readout_lm).reshape(readout.out.shape)
+                readout += readout_lm
             else:
-                if self.state['mask_first_lm']:
-                    lm_readout = self.lm_embedder(lm_hidden_state)
-                    # We will do masking for the first step by shifting
-                    # lm_readout to left and then right one time step each
-                    if y.ndim == 1:
-                        lm_readout = Shift()(Shift(-1)(lm_readout.reshape(
-                            (y.shape[0], 1, self.state['dim']))))
-                    else:
-                        lm_readout = Shift()(Shift(-1)(lm_readout.reshape(
-                            (y.shape[0], y.shape[1], self.state['dim'])))).reshape(
-                                    readout.out.shape)
-                    readout += lm_readout
+                lm_alpha = self.lm_controller(Shift()(lm_hidden_state))
+                if y.ndim == 1:
+                    lm_alpha = lm_alpha.reshape((y.shape[0], 1,))
+                    readout_lm = Shift()(self.lm_embedder(lm_hidden_state).reshape(
+                                         (y.shape[0], 1, self.state['dim'])))
                 else:
-                    if y.ndim == 1:
-                        readout += Shift()(self.lm_embedder(lm_hidden_state).reshape(
-                            (y.shape[0], 1, self.state['dim'])))
-                    else:
-                        # This place needs explanation. When prev_word_readout is applied to
-                        # approx_embeddings the resulting shape is
-                        # (n_batches * sequence_length, repr_dimensionality). We first
-                        # transform it into 3D tensor to shift forward in time. Then
-                        # reshape it back.
-                        readout += Shift()(self.lm_embedder(lm_hidden_state).reshape(
-                            (y.shape[0], y.shape[1], self.state['dim']))).reshape(
-                                    readout.out.shape)
+                    lm_alpha = lm_alpha.reshape((y.shape[0], y.shape[1],))
+                    readout_lm = Shift()(self.lm_embedder(lm_hidden_state).reshape(
+                                (y.shape[0], y.shape[1], self.state['dim'])))
+                readout += (lm_alpha[:,:,None] * readout_lm).reshape(readout.out.shape)
 
         for fun in self.output_nonlinearities:
             readout = fun(readout)
@@ -1422,6 +1426,8 @@ class RNNEncoderDecoder(object):
             self.state['train_only_readout'] = False
         if 'mask_first_lm' not in self.state:
             self.state['mask_first_lm'] = False
+        if 'random_readout' not in self.state:
+            self.state['random_readout'] = False
 
     def build(self):
         logger.debug("Create input variables")

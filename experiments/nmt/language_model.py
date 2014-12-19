@@ -18,6 +18,7 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from groundhog.datasets import PytablesBitextIterator_UL
 from groundhog.models import LM_Model
 from groundhog.trainer.SGD_adadelta import SGD as SGD_adadelta
+from groundhog.trainer.SGD_rmspropv2 import SGD as SGD_rmsprop
 from groundhog.mainLoop import MainLoop
 
 from groundhog.layers import\
@@ -234,6 +235,7 @@ class LM_builder(object):
 
     def __create_layers__(self, build_output=True):
 
+        logger.debug("_create_layers")
         self.emb_words = MultiLayer(
             self.rng,
             n_in=self.state['n_sym'],
@@ -258,7 +260,7 @@ class LM_builder(object):
                 gater_activation=self.state['rec_gater'],
                 reseting=self.state['rec_reseting'],
                 reseter_activation=self.state['rec_reseter'],
-                 name='lm_rec')
+                name='lm_rec')
 
         gate_kwargs = dict(self.default_kwargs)
         gate_kwargs.update(dict(

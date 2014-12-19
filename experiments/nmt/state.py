@@ -454,7 +454,7 @@ def prototype_search_state_with_LM_zh_en():
 
     return state
 
-def prototype_search_state_without_LM():
+def prototype_search_state_tr_en_without_LM():
 
     state = prototype_encdec_state()
 
@@ -471,7 +471,66 @@ def prototype_search_state_without_LM():
     state['backward'] = True
     state['seqlen'] = 50
     state['sort_k_batches'] = 20
-    state['prefix'] = 'searchWithoutLM_'
+    state['prefix']='/data/lisatmp3/firatorh/nmt/tr-en_lm/trainedModels/unionWithoutLM/searchWithoutLM_'
+
+    baseDir='/data/lisatmp3/firatorh/nmt/tr-en_lm/trainedModels/unionWithoutLM/'
+    state['target'] = [baseDir + 'binarized_text.en.shuf.h5']
+    state['source'] = [baseDir + 'binarized_text.tr.shuf.h5']
+    state['indx_word'] = baseDir + 'ivocab.tr.pkl'
+    state['indx_word_target'] = baseDir + 'iunion_dict.pkl'
+    state['word_indx'] = baseDir + 'vocab.tr.pkl'
+    state['word_indx_trgt'] = baseDir + 'union_dict.pkl'
+
+    state['null_sym_source'] = 30000
+    state['null_sym_target'] = 30000
+    state['n_sym_source'] = state['null_sym_source'] + 1
+    state['n_sym_target'] = state['null_sym_target'] + 1
+
+    state['seqlen'] = 30
+    state['bs']  = 80
+
+    state['dim'] = 1000
+    state['rank_n_approx'] = 620
+
+    state['bleu_script'] = '/data/lisatmp3/firatorh/turkishParallelCorpora/iwslt14/scripts/multi-bleu.perl'
+    state['validation_set'] = '/data/lisatmp3/firatorh/nmt/tr-en_lm/dev/IWSLT14.TED.dev2010.tr-en.tr.tok.seg'
+    state['validation_set_grndtruth'] = '/data/lisatmp3/firatorh/nmt/tr-en_lm/dev/IWSLT14.TED.dev2010.tr-en.en.tok'
+    state['validation_set_out']='/data/lisatmp3/firatorh/nmt/tr-en_lm/trainedModels/unionWithoutLM/union0_valOut.txt'
+    state['output_validation_set'] = True
+    state['beam_size'] = 20
+    state['bleu_val_frequency'] = 1000
+    state['validation_burn_in'] = 0
+
+    return state
+
+def prototype_search_state_tr_en_without_LM2():
+
+    state = prototype_search_state_tr_en_without_LM()
+
+    state['include_lm'] = False
+    state['reload_lm'] = False
+    state['mask_first_lm'] = False
+    state['reload'] = False
+
+    state['prefix']='/data/lisatmp3/firatorh/nmt/tr-en_lm/trainedModels/unionWithoutLM2/searchWithoutLM_'
+
+    baseDir='/data/lisatmp3/firatorh/nmt/tr-en_lm/trainedModels/unionWithoutLM2/'
+    state['target'] = [baseDir + 'binarized_text.en.shuf.h5']
+    state['source'] = [baseDir + 'binarized_text.tr.shuf.h5']
+    state['indx_word'] = baseDir + 'ivocab.tr.pkl'
+    state['indx_word_target'] = baseDir + 'iunion_dict.pkl'
+    state['word_indx'] = baseDir + 'vocab.tr.pkl'
+    state['word_indx_trgt'] = baseDir + 'union_dict.pkl'
+
+    state['bleu_script'] = '/data/lisatmp3/firatorh/turkishParallelCorpora/iwslt14/scripts/multi-bleu.perl'
+    state['validation_set'] = '/data/lisatmp3/firatorh/nmt/tr-en_lm/dev/IWSLT14.TED.dev2010.tr-en.tr.tok.seg'
+    state['validation_set_grndtruth'] = '/data/lisatmp3/firatorh/nmt/tr-en_lm/dev/IWSLT14.TED.dev2010.tr-en.en.tok'
+    state['validation_set_out']='/data/lisatmp3/firatorh/nmt/tr-en_lm/trainedModels/unionWithoutLM2/union0_valOut.txt'
+    state['output_validation_set'] = True
+    state['beam_size'] = 20
+    state['bleu_val_frequency'] = 1000
+    state['validation_burn_in'] = 0
+
     return state
 
 def prototype_search_state_zh_en_without_LM():
@@ -488,14 +547,14 @@ def prototype_search_state_zh_en_without_LM():
     state['saveFreq'] = 45
 
     # Source and target sentence
-    state['target']=["/data/lisatmp3/firatorh/nmt/zh-en_lm/binarized_text.en.shuf.h5"]
-    state['source']=["/data/lisatmp3/firatorh/nmt/zh-en_lm/binarized_text.zh.shuf.h5"]
+    state['target']=["/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/unionWithoutLM/binarized_text.en.shuf.h5"]
+    state['source']=["/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/unionWithoutLM/binarized_text.zh.shuf.h5"]
 
     # Word -> Id and Id-> Word Dictionaries
-    state['indx_word']="/data/lisatmp3/firatorh/nmt/zh-en_lm/ivocab.zh.pkl"
-    state['indx_word_target']="/data/lisatmp3/firatorh/nmt/zh-en_lm/ijoint_vocab.pkl"
-    state['word_indx']="/data/lisatmp3/firatorh/nmt/zh-en_lm/vocab.zh.pkl"
-    state['word_indx_trgt']="/data/lisatmp3/firatorh/nmt/zh-en_lm/joint_vocab.pkl"
+    state['indx_word']="/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/unionWithoutLM/ivocab.zh.pkl"
+    state['indx_word_target']="/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/unionWithoutLM/iunion_dict.pkl"
+    state['word_indx']="/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/unionWithoutLM/vocab.zh.pkl"
+    state['word_indx_trgt']="/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/unionWithoutLM/union_dict.pkl"
 
     state['source_encoding'] = 'utf8'
 
@@ -512,16 +571,16 @@ def prototype_search_state_zh_en_without_LM():
     state['backward'] = True
     state['seqlen'] = 50
     state['sort_k_batches'] = 20
-    state['prefix']='/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/searchWithoutLM_'
+    state['prefix']='/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/unionWithoutLM/searchWithoutLM_'
 
     # bleu validation args
     state['bleu_script'] = '/data/lisatmp3/firatorh/turkishParallelCorpora/iwslt14/scripts/multi-bleu.perl'
     state['validation_set'] = '/data/lisatmp3/firatorh/nmt/zh-en_lm/dev/IWSLT14.TED.dev2010.zh-en.zh.xml.txt.trimmed'
     state['validation_set_grndtruth'] = '/data/lisatmp3/firatorh/nmt/zh-en_lm/dev/IWSLT14.TED.dev2010.zh-en.en.tok'
-    state['validation_set_out']='/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/searchWithoutLM_valOut.txt'
+    state['validation_set_out']='/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/unionWithoutLM/searchWithoutLM_valOut.txt'
     state['output_validation_set'] = True
     state['beam_size'] = 20
-    state['bleu_val_frequency'] = 500
+    state['bleu_val_frequency'] = 1000
     state['validation_burn_in'] = 0
 
     return state
@@ -698,6 +757,265 @@ def prototype_search_state_with_LM_tr_en_MASK():
     state['output_validation_set'] = True
     state['beam_size'] = 20
     state['bleu_val_frequency'] = 5000
+    state['validation_burn_in'] = 0
+
+    return state
+
+def prototype_search_state_with_LM_tr_en_MASK_TEST():
+
+    state = prototype_encdec_state()
+
+    state['include_lm'] = True
+    state['reload_lm'] = True
+    state['mask_first_lm'] = True
+    state['train_only_readout'] = True
+
+    state['cutoff'] = 1.0
+    state['hookFreq'] =400
+    state['saveFreq'] = 30
+
+    state['dec_rec_layer'] = 'RecurrentLayerWithSearch'
+    state['search'] = True
+    state['last_forward'] = False
+    state['forward'] = True
+    state['backward'] = True
+    state['seqlen'] = 50
+    state['sort_k_batches'] = 20
+    state['prefix']='/data/lisatmp3/firatorh/nmt/tr-en_lm/outputs/masking/combinedTEST_'
+
+    state['bleu_script'] = '/data/lisatmp3/firatorh/turkishParallelCorpora/iwslt14/scripts/multi-bleu.perl'
+    state['validation_set'] = '/data/lisatmp3/firatorh/nmt/tr-en_lm/dev/IWSLT14.TED.dev2010.tr-en.tr.tok.seg'
+    state['validation_set_grndtruth'] = '/data/lisatmp3/firatorh/nmt/tr-en_lm/dev/IWSLT14.TED.dev2010.tr-en.en.tok'
+    state['validation_set_out']='/data/lisatmp3/firatorh/nmt/tr-en_lm/outputs/masking/combinedTEST_valOut.txt'
+    state['output_validation_set'] = True
+    state['beam_size'] = 20
+    state['bleu_val_frequency'] = 5000
+    state['validation_burn_in'] = 0
+
+    return state
+
+def prototype_search_state_with_LM_tr_en_UNION():
+
+    state = prototype_state()
+
+    state['include_lm'] = True
+    state['reload_lm'] = True
+    state['mask_first_lm'] = False
+    state['train_only_readout'] = False
+
+    state['cutoff'] = 1.0
+    state['hookFreq'] =400
+    state['saveFreq'] = 30
+
+    state['dec_rec_layer'] = 'RecurrentLayerWithSearch'
+    state['search'] = True
+    state['last_forward'] = False
+    state['forward'] = True
+    state['backward'] = True
+    state['seqlen'] = 50
+    state['sort_k_batches'] = 20
+    state['prefix']='/data/lisatmp3/firatorh/nmt/tr-en_lm/trainedModels/union/union0_'
+
+
+    baseDir='/data/lisatmp3/firatorh/nmt/tr-en_lm/trainedModels/union/'
+    state['target'] = [baseDir + 'binarized_text.en.shuf.h5']
+    state['source'] = [baseDir + 'binarized_text.tr.shuf.h5']
+    state['indx_word'] = baseDir + 'ivocab.tr.pkl'
+    state['indx_word_target'] = baseDir + 'iunion_dict.pkl'
+    state['word_indx'] = baseDir + 'vocab.tr.pkl'
+    state['word_indx_trgt'] = baseDir + 'union_dict.pkl'
+
+    state['null_sym_source'] = 30000
+    state['null_sym_target'] = 30000
+    state['n_sym_source'] = state['null_sym_source'] + 1
+    state['n_sym_target'] = state['null_sym_target'] + 1
+
+    state['seqlen'] = 30
+    state['bs']  = 80
+
+    state['dim'] = 1000
+    state['rank_n_approx'] = 620
+
+    state['bleu_script'] = '/data/lisatmp3/firatorh/turkishParallelCorpora/iwslt14/scripts/multi-bleu.perl'
+    state['validation_set'] = '/data/lisatmp3/firatorh/nmt/tr-en_lm/dev/IWSLT14.TED.dev2010.tr-en.tr.tok.seg'
+    state['validation_set_grndtruth'] = '/data/lisatmp3/firatorh/nmt/tr-en_lm/dev/IWSLT14.TED.dev2010.tr-en.en.tok'
+    state['validation_set_out']='/data/lisatmp3/firatorh/nmt/tr-en_lm/trainedModels/union/union0_valOut.txt'
+    state['output_validation_set'] = True
+    state['beam_size'] = 20
+    state['bleu_val_frequency'] = 1000
+    state['validation_burn_in'] = 0
+
+    return state
+
+def prototype_search_state_with_LM_zh_en_UNION():
+
+    state = prototype_encdec_state()
+
+    state['include_lm'] = True
+    state['reload_lm'] = True
+    state['mask_first_lm'] = False
+    state['train_only_readout'] = False
+
+    state['cutoff'] = 1.0
+    state['hookFreq'] =400
+    state['algo'] = 'SGD_adadelta'
+    state['saveFreq'] = 30
+
+    # Source and target sentence
+    state['target']=["/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/union/binarized_text.en.shuf.h5"]
+    state['source']=["/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/union/binarized_text.zh.shuf.h5"]
+
+    # Word -> Id and Id-> Word Dictionaries
+    state['indx_word']="/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/union/ivocab.zh.pkl"
+    state['indx_word_target']="/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/union/iunion_dict.pkl"
+    state['word_indx']="/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/union/vocab.zh.pkl"
+    state['word_indx_trgt']="/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/union/union_dict.pkl"
+
+    state['source_encoding'] = 'utf8'
+
+    state['null_sym_source']=4839
+    state['null_sym_target']=30000
+
+    state['n_sym_source']=state['null_sym_source'] + 1
+    state['n_sym_target']=state['null_sym_target'] + 1
+
+    state['dec_rec_layer'] = 'RecurrentLayerWithSearch'
+    state['search'] = True
+    state['last_forward'] = False
+    state['forward'] = True
+    state['backward'] = True
+    state['seqlen'] = 50
+    state['sort_k_batches'] = 20
+    state['prefix']='/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/union/union0_'
+
+    # bleu validation args
+    state['bleu_script'] = '/data/lisatmp3/firatorh/turkishParallelCorpora/iwslt14/scripts/multi-bleu.perl'
+    state['validation_set'] = '/data/lisatmp3/firatorh/nmt/zh-en_lm/dev/IWSLT14.TED.dev2010.zh-en.zh.xml.txt.trimmed'
+    state['validation_set_grndtruth'] = '/data/lisatmp3/firatorh/nmt/zh-en_lm/dev/IWSLT14.TED.dev2010.zh-en.en.tok'
+    state['validation_set_out']='/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/union/union0_valOut.txt'
+    state['output_validation_set'] = True
+    state['beam_size'] = 20
+    state['bleu_val_frequency'] = 5000
+    state['validation_burn_in'] = 10000
+
+    return state
+
+def prototype_search_state_with_LM_zh_en_UNION_RAND_FINETUNE():
+
+    state = prototype_encdec_state()
+
+    state['include_lm'] = True
+    state['reload_lm'] = True
+    state['mask_first_lm'] = False
+    state['train_only_readout'] = True
+    state['random_readout'] = True
+
+    state['cutoff'] = 1.0
+    state['hookFreq'] =10
+    state['algo'] = 'SGD_adadelta'
+    state['saveFreq'] = 30
+
+    # Source and target sentence
+    state['target']=["/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/union/binarized_text.en.shuf.h5"]
+    state['source']=["/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/union/binarized_text.zh.shuf.h5"]
+
+    # Word -> Id and Id-> Word Dictionaries
+    state['indx_word']="/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/unionFinetuneRnd/ivocab.zh.pkl"
+    state['indx_word_target']="/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/unionFinetuneRnd/iunion_dict.pkl"
+    state['word_indx']="/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/unionFinetuneRnd/vocab.zh.pkl"
+    state['word_indx_trgt']="/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/unionFinetuneRnd/union_dict.pkl"
+
+    state['source_encoding'] = 'utf8'
+
+    state['null_sym_source']=4839
+    state['null_sym_target']=30000
+
+    state['n_sym_source']=state['null_sym_source'] + 1
+    state['n_sym_target']=state['null_sym_target'] + 1
+
+    state['dec_rec_layer'] = 'RecurrentLayerWithSearch'
+    state['search'] = True
+    state['last_forward'] = False
+    state['forward'] = True
+    state['backward'] = True
+    state['seqlen'] = 50
+    state['sort_k_batches'] = 20
+    state['prefix']='/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/unionFinetuneRnd/unionRnd_'
+
+    # bleu validation args
+    state['bleu_script'] = '/data/lisatmp3/firatorh/turkishParallelCorpora/iwslt14/scripts/multi-bleu.perl'
+    state['validation_set'] = '/data/lisatmp3/firatorh/nmt/zh-en_lm/dev/IWSLT14.TED.dev2010.zh-en.zh.xml.txt.trimmed'
+    state['validation_set_grndtruth'] = '/data/lisatmp3/firatorh/nmt/zh-en_lm/dev/IWSLT14.TED.dev2010.zh-en.en.tok'
+    state['validation_set_out']='/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/unionFinetuneRnd/unionRnd_valOut.txt'
+    state['output_validation_set'] = True
+    state['beam_size'] = 20
+    state['bleu_val_frequency'] = 1000
+    state['validation_burn_in'] = 0
+
+    return state
+
+def prototype_search_state_with_LM_zh_en_UNION_RAND():
+
+    state = prototype_search_state_with_LM_zh_en_UNION_RAND_FINETUNE()
+
+    state['train_only_readout'] = False
+
+    state['prefix']='/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/unionRnd/unionRnd_'
+    state['validation_set_out']='/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/unionRnd/unionRnd_valOut.txt'
+    state['bleu_val_frequency'] = 2500
+    return state
+
+def prototype_search_state_with_LM_zh_en_UNION_RAND_CNT():
+
+    state = prototype_search_state_with_LM_zh_en_UNION_RAND_FINETUNE()
+
+    state['train_only_readout'] = False
+    state['random_readout'] = False
+
+    state['prefix']='/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/unionFinetuneRndCnt/unionFinetuneRndCnt_'
+    state['validation_set_out']='/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/unionFinetuneRndCnt/unionFinetuneRndCnt_valOut.txt'
+    state['bleu_val_frequency'] = 2500
+    return state
+
+
+def prototype_search_state_with_LM_zh_en_MASK_TEST_UNION():
+
+    state = prototype_search_state_with_LM_zh_en_UNION_RAND_FINETUNE()
+
+    state['include_lm'] = True
+    state['reload_lm'] = True
+    state['mask_first_lm'] = True
+    state['train_only_readout'] = True
+    state['random_readout'] = True
+
+    state['hookFreq'] =25
+
+    state['prefix']='/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/unionMasking/maskingTest_'
+    state['validation_set_out']='/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/unionMasking/maskingTest_valOut.txt'
+    state['output_validation_set'] = True
+    state['beam_size'] = 20
+    state['bleu_val_frequency'] = 5000
+    state['validation_burn_in'] = 0
+
+    return state
+
+def prototype_search_state_with_LM_zh_en_UNION_TANH_FINETUNE():
+
+    state = prototype_search_state_with_LM_zh_en_UNION_RAND_FINETUNE()
+
+    state['include_lm'] = True
+    state['reload_lm'] = True
+    state['mask_first_lm'] = False
+    state['train_only_readout'] = True
+    state['random_readout'] = True
+
+    state['hookFreq'] =50
+
+    state['prefix']='/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/unionFinetuneRndTanh/unionTanh_'
+    state['validation_set_out']='/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/unionFinetuneRndTanh/unionTanh_valOut.txt'
+    state['output_validation_set'] = True
+    state['beam_size'] = 20
+    state['bleu_val_frequency'] = 1000
     state['validation_burn_in'] = 0
 
     return state

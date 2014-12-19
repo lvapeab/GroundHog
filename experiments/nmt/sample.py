@@ -116,6 +116,8 @@ class BeamSearch(object):
 
             if self.enc_dec.state['include_lm']:
                 new_states, new_states_lm = self.comp_next_states(c, k, inputs, new_states_lm, *new_states)
+                #if k < 2:
+                #    new_states_lm = 0. * new_states_lm
             else:
                 new_states = self.comp_next_states(c, k, inputs, new_states_lm, *new_states)
 
@@ -145,7 +147,6 @@ class BeamSearch(object):
                 logger.warning("Did not manage without UNK")
                 return self.search(seq, n_samples, False, minlen)
             elif n_samples < 500:
-                import ipdb; ipdb.set_trace()
                 logger.warning("Still no translations: try beam size {}".format(n_samples * 2))
                 return self.search(seq, n_samples * 2, False, minlen)
             else:

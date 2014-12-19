@@ -89,7 +89,13 @@ class PytablesBitextFetcher(threading.Thread):
 
                 tlen, tpos = target_index[offset]['length'], target_index[offset]['pos']
                 offset += 1
-                target_ngrams. append(target_data[tpos:tpos+tlen])
+
+                # discard if there are too many unknown words in the candidate sentence
+                cand = numpy.array(target_data[tpos:tpos+tlen])
+                if numpy.sum(cand >= diter.n_words - 1) > int(numpy.round(0.1 * tlen)):
+                    continue
+
+                target_ngrams.append(target_data[tpos:tpos+tlen])
                 # for n-grams
                 """
                 # for each word, grab n-gram

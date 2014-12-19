@@ -183,3 +183,40 @@ def prototype_lm_state_en_finetune():
 
     return state
 
+def prototype_lm_state_en_finetune_union():
+    state = prototype_lm_state()
+    state['target']='/data/lisatmp3/firatorh/nmt/en_lm/finetune/binarized_iwlst.en.shuf.h5'
+
+    state['indx_word'] = '/data/lisatmp3/firatorh/nmt/en_lm/union/iunion_dict.pkl'
+    state['word_indx'] = '/data/lisatmp3/firatorh/nmt/en_lm/union/union_dict.pkl'
+
+    # index of 'the' in english
+    state['sampling_seed'] = 4
+
+    state['algo'] = 'SGD_rmsprop'
+    state['lr'] = 1e-3
+    state['bs'] = 128
+
+    state['prefix']='/data/lisatmp3/firatorh/nmt/tr-en_lm/outputs/masking/finetuned_lm_'
+
+    return state
+
+def prototype_lm_state_en_finetune_union2():
+    state = prototype_lm_state()
+    state['target']='/data/lisatmp3/firatorh/nmt/en_lm/union/binarized_iwslt.en.h5'
+
+    state['indx_word'] = '/data/lisatmp3/firatorh/nmt/en_lm/union/iunion_dict.pkl'
+    state['word_indx'] = '/data/lisatmp3/firatorh/nmt/en_lm/union/union_dict.pkl'
+
+    # index of 'the' in english
+    state['sampling_seed'] = 4
+    state['hookFreq'] = 50
+
+    state['algo'] = 'SGD_rmsprop'
+    state['lr'] = 1e-3
+    state['bs'] = 128
+
+    state['prefix']='/data/lisatmp3/firatorh/nmt/en_lm/union/test_val_'
+
+    return state
+

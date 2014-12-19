@@ -167,22 +167,23 @@ class Container(object):
             filter(lambda x : not x.name in self.not_save_params, self.params)])
         numpy.savez(filename, **vals)
 
-    def load(self, filename):
+    def load(self, filename, exclude_params=[]):
         """
         Load the model.
         """
         vals = numpy.load(filename)
         for p in self.params:
-            if p.name in vals:
-                logger.debug('Loading {} of {}'.format(p.name, p.get_value(borrow=True).shape))
-                if p.get_value().shape != vals[p.name].shape:
-                    raise Exception("Shape mismatch: {} != {} for {}"
-                            .format(p.get_value().shape, vals[p.name].shape, p.name))
-                p.set_value(vals[p.name])
-            else:
-                # FIXME: do not stop loading even if there's a parameter value missing
-                #raise Exception("No parameter {} given".format(p.name))
-                logger.error( "No parameter {} given: default initialization used".format(p.name))
+            if p not in exclude_params:
+                if p.name in vals:
+                    logger.debug('Loading {} of {}'.format(p.name, p.get_value(borrow=True).shape))
+                    if p.get_value().shape != vals[p.name].shape:
+                        raise Exception("Shape mismatch: {} != {} for {}"
+                                .format(p.get_value().shape, vals[p.name].shape, p.name))
+                    p.set_value(vals[p.name])
+                else:
+                    # FIXME: do not stop loading even if there's a parameter value missing
+                    #raise Exception("No parameter {} given".format(p.name))
+                    logger.error( "No parameter {} given: default initialization used".format(p.name))
         unknown = set(vals.keys()) - {p.name for p in self.params}
         if len(unknown):
             logger.error("Unknown parameters {} given".format(unknown))

@@ -292,7 +292,14 @@ def main():
                 else None)
 
     if state['reload'] or state['reload_lm']:
-        main.load()
+        exclude_params=[]
+        if enc_dec.state['random_readout'] and\
+                enc_dec.state['train_only_readout']:
+            exclude_params = set(lm_model.params)-set(enc_dec.lm_model.exclude_params)
+        if enc_dec.state['random_readout'] and\
+                not enc_dec.state['train_only_readout']:
+            exclude_params = set(enc_dec.decoder.readout_params)
+        main.load(exclude_params=exclude_params)
     if state['loopIters'] > 0:
         main.main()
 
