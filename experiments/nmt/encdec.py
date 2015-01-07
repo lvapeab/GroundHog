@@ -895,16 +895,19 @@ class Decoder(EncoderDecoderBase):
         # build output refers to the softmax over words
         self.LM_builder.__create_layers__(build_output=False)
         self.excluded_params = self.LM_builder.get_const_params()
-        
-        # controller mlp for external language model, 
+
+        # controller mlp for external language model,
         # generates a scaler btw [0,1] to weight language
         # model path, and conditioned on hidden_state_lm
         self.lm_controller = MultiLayer(
                     self.rng,
                     n_in=self.state_lm['dim'],
-                    n_hids=[self.state['dim'], 1],
-                    activation=['lambda x: TT.tanh(x)', 'lambda x: TT.nnet.sigmoid(x)'],
-                    bias_scale=[self.state['bias']]*2,
+                    #n_hids=[self.state['dim'], 1],
+                    #activation=['lambda x: TT.tanh(x)', 'lambda x: TT.nnet.sigmoid(x)'],
+                    #bias_scale=[self.state['bias']]*2,
+                    n_hids=[1],
+                    activation=['lambda x: TT.nnet.sigmoid(x)'],
+                    bias_scale=[self.state['bias']],
                     name='lm_controller')
         self.readout_params += self.lm_controller.params
 
@@ -1256,8 +1259,8 @@ class Decoder(EncoderDecoderBase):
                         (y.shape[0], y.shape[1], self.state['dim']))).reshape(
                                 readout.out.shape)
 
-        # add language model, for evaluation lm_hidden_state is shifted forward in time 
-        # for one step and then multiplied by alpha. For sampling and search, 
+        # add language model, for evaluation lm_hidden_state is shifted forward in time
+        # for one step and then multiplied by alpha. For sampling and search,
         # lm_hidden_state is zeroed if predicted word is 0 and then multiplied by alpha
         # This snippet is uggly
         if self.state['include_lm']:
@@ -1265,15 +1268,21 @@ class Decoder(EncoderDecoderBase):
             check_first_word = (y > 0
                 if self.state['check_first_word']
                 else TT.ones((y.shape[0]), dtype="float32"))
+            #import ipdb; ipdb.set_trace()
             if mode != Decoder.EVALUATION:
+                #check_first_word=theano.printing.Print('check_first_word')(check_first_word)
                 lm_hidden_state = TT.switch(check_first_word[:,None],
                                             lm_hidden_state, 0. * lm_hidden_state)
                 lm_alpha = self.lm_controller(lm_hidden_state)
                 readout_lm = TT.shape_padright(check_first_word) * self.lm_embedder(lm_hidden_state).out
                 readout_lm = (lm_alpha.reshape([readout_lm.shape[0]])[:,None] * readout_lm).reshape(readout.out.shape)
+                #readout_lm = (numpy.float32(0.5) * readout_lm).reshape(readout.out.shape)
                 readout += readout_lm
+
+                #readout.out = (numpy.float32(1.0) - lm_alpha.out.flatten()[:, None]) * readout +  readout_lm
             else:
                 lm_alpha = self.lm_controller(Shift()(lm_hidden_state))
+                #lm_alpha.out=theano.printing.Print('lm_alpha:')(lm_alpha.out)
                 if y.ndim == 1:
                     lm_alpha = lm_alpha.reshape((y.shape[0], 1,))
                     readout_lm = Shift()(self.lm_embedder(lm_hidden_state).reshape(
@@ -1282,7 +1291,10 @@ class Decoder(EncoderDecoderBase):
                     lm_alpha = lm_alpha.reshape((y.shape[0], y.shape[1],))
                     readout_lm = Shift()(self.lm_embedder(lm_hidden_state).reshape(
                                 (y.shape[0], y.shape[1], self.state['dim'])))
-                readout += (lm_alpha[:,:,None] * readout_lm).reshape(readout.out.shape)
+                    readout_lm = (lm_alpha[:,:,None] * readout_lm).reshape(readout.out.shape)
+                    #readout_lm = (numpy.float32(0.5) * readout_lm.out).reshape(readout.out.shape)
+                #readout.out = (numpy.float32(1.0) -  lm_alpha.out.flatten()[:, None]) * readout + readout_lm
+                readout += readout_lm
 
         for fun in self.output_nonlinearities:
             readout = fun(readout)
@@ -1547,6 +1559,11 @@ class RNNEncoderDecoder(object):
             else:
                 excluded_params = self.decoder.excluded_params
             # verbose for debugging purposes
+            if 'additional_excludes' in self.state and\
+                self.state['additional_excludes']:
+                excluded_params += [x for x in self.predictions.params\
+                        if x.name in self.state['additional_excludes']]
+
             logger.debug("Excluding these params for training:")
             print excluded_params
             logger.debug("Training these params:")

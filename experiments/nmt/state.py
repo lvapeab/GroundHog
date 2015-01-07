@@ -1019,3 +1019,22 @@ def prototype_search_state_with_LM_zh_en_UNION_TANH_FINETUNE():
     state['validation_burn_in'] = 0
 
     return state
+
+def prototype_search_state_with_LM_zh_en_UNION_RAND_FINETUNE_CNTR():
+
+    state = prototype_search_state_with_LM_zh_en_UNION_RAND_FINETUNE()
+
+    state['include_lm'] = True
+    state['reload_lm'] = True
+    state['train_only_readout'] = True
+    state['random_readout'] = True
+    #state['additional_excludes'] = ['b_0_lm_controller','W_0_lm_controller']
+    state['prefix']='/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/unionFinetuneRndCtr/unionRnd_'
+
+    # bleu validation args
+    state['beam_size'] = 20
+    state['bleu_val_frequency'] = 500
+    state['validation_burn_in'] = 0
+
+    return state
+

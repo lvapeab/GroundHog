@@ -4,6 +4,7 @@ from state_lm import\
     prototype_lm_state_tr,\
     prototype_lm_state_en_finetune,\
     prototype_lm_state_en_finetune_union,\
+    prototype_lm_state_en_wiki_union,\
     prototype_lm_state_en_finetune_union2
 
 from language_model import LM_builder
@@ -30,6 +31,7 @@ from state import\
     prototype_search_state_with_LM_tr_en_UNION,\
     prototype_search_state_with_LM_zh_en_UNION,\
     prototype_search_state_with_LM_zh_en_UNION_RAND_FINETUNE,\
+    prototype_search_state_with_LM_zh_en_UNION_RAND_FINETUNE_CNTR,\
     prototype_search_state_with_LM_zh_en_UNION_RAND_CNT,\
     prototype_search_state_with_LM_zh_en_UNION_RAND,\
     prototype_search_state_with_LM_tr_en_MASK_TEST,\

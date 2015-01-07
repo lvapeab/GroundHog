@@ -210,13 +210,32 @@ def prototype_lm_state_en_finetune_union2():
 
     # index of 'the' in english
     state['sampling_seed'] = 4
-    state['hookFreq'] = 50
+    state['hookFreq'] = 250
 
     state['algo'] = 'SGD_rmsprop'
     state['lr'] = 1e-3
-    state['bs'] = 128
+    state['bs'] = 1
 
     state['prefix']='/data/lisatmp3/firatorh/nmt/en_lm/union/test_val_'
+
+    return state
+
+def prototype_lm_state_en_wiki_union():
+    state = prototype_lm_state()
+    state['target']='/data/lisatmp3/xukelvin/translation/en_lm_union/binarized_wiki_union.en.shuf.h5'
+
+    state['indx_word'] = '/data/lisatmp3/firatorh/nmt/en_lm/union/iunion_dict.pkl'
+    state['word_indx'] = '/data/lisatmp3/firatorh/nmt/en_lm/union/union_dict.pkl'
+
+    # index of 'the' in english
+    state['sampling_seed'] = 4
+    state['hookFreq'] = 100
+
+    state['algo'] = 'SGD_rmsprop'
+    state['lr'] = 1e-3
+    state['bs'] = 1
+
+    state['prefix']='/data/lisatmp3/firatorh/nmt/en_lm/en-wiki-union/test_val_'
 
     return state
 
