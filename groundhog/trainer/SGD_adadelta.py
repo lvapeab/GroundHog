@@ -101,7 +101,11 @@ class SGD(object):
         gs = rval[:nparams]
         rules = rval[nparams:nparams + nrules]
         outs = rval[nparams + nrules:]
-
+        #idx1 = [i for i,j in enumerate(_params) if j.name =='W_0_lm_controller'][0]
+        #idx2 = [i for i,j in enumerate(_params) if j.name =='W_1_lm_controller'][0]
+        #gs[idx1] = theano.printing.Print('gW_0_lm_controller:')(gs[idx1])
+        #gs[idx2] = theano.printing.Print('gW_1_lm_controller:')(gs[idx2])
+        #import ipdb; ipdb.set_trace()
         norm_gs = TT.sqrt(sum(TT.sum(x**2)
             for x,p in zip(gs, _params) if p not in self.model.exclude_params_for_norm))
         if 'cutoff' in state and state['cutoff'] > 0:

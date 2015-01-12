@@ -190,6 +190,10 @@ class LM_Model(Model):
 
         for vals in data_iterator:
             n_batches += 1
+            if n_batches % 100 == 0:
+                print 'n_batches:{}'.format(n_batches)
+            if not vals or n_batches==data_iterator.val_size:
+                break
 
             if isinstance(vals, dict):
                 val = vals.values()[0]

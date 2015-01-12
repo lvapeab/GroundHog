@@ -239,3 +239,32 @@ def prototype_lm_state_en_wiki_union():
 
     return state
 
+def prototype_lm_state_en_wiki_union_ppl():
+
+    state = prototype_lm_state()
+
+    state['target']='/data/lisatmp3/xukelvin/translation/en_lm_union/binarized_wiki_union.en.shuf.h5'
+    #state['val_target']='/data/lisatmp3/firatorh/nmt/en_lm/ppl/binarized_wiki_union.en.shuf2.h5'
+    state['val_target']='/data/lisatmp3/firatorh/nmt/en_lm/ppl/binarized_text.dev2010.zh-en.en.h5'
+    state['tst_target']='/data/lisatmp3/firatorh/nmt/en_lm/ppl/binarized_text.tst2010.zh-en.en.h5'
+
+    state['indx_word'] = '/data/lisatmp3/firatorh/nmt/en_lm/union/iunion_dict.pkl'
+    state['word_indx'] = '/data/lisatmp3/firatorh/nmt/en_lm/union/union_dict.pkl'
+
+    # index of 'the' in english
+    state['sampling_seed'] = 4
+    state['hookFreq'] = 20
+    state['validFreq'] = 10
+
+    state['algo'] = 'SGD_adadelta'
+    state['lr'] = 1e-3
+    state['bs'] = 1
+
+    state['divide_lr'] = 1.
+    state['cost_threshold'] = 1.0002
+    #state['validate_postprocess'] = 'lambda x:10**(x/numpy.log(10))'
+
+    state['prefix']='/data/lisatmp3/firatorh/nmt/en_lm/ppl/test_val_'
+
+    return state
+

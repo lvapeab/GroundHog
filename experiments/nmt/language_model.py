@@ -49,7 +49,7 @@ def none_if_zero(x):
         return None
     return x
 
-def create_padded_batch(state, x, y, return_dict=False):
+def create_padded_batch(state, x, y, seqlen, return_dict=False):
     """A callback given to the iterator to transform data in suitable format
     :type x: list
     :param x: list of numpy.array's, each array is a batch of phrases
@@ -68,13 +68,13 @@ def create_padded_batch(state, x, y, return_dict=False):
     * len(x[0][idx]) is the size of sequence idx
     """
 
-    mx = state['seqlen']
-    my = state['seqlen']
+    mx = seqlen
+    my = seqlen
     if state['trim_batches']:
         # Similar length for all source sequences
-        mx = numpy.minimum(state['seqlen'], max([len(xx) for xx in x[0]]))+1
+        mx = numpy.minimum(seqlen, max([len(xx) for xx in x[0]]))+1
         # Similar length for all target sequences
-        my = numpy.minimum(state['seqlen'], max([len(xx) for xx in y[0]]))+1
+        my = numpy.minimum(seqlen, max([len(xx) for xx in y[0]]))+1
 
     # Batch size
     n = x[0].shape[0]
@@ -164,15 +164,18 @@ def get_batch_iterator(state):
     """
     class Iterator(PytablesBitextIterator_UL):
 
-        def __init__(self, *args, **kwargs):
+        def __init__(self, mode='train',val_size=1000, *args, **kwargs):
             PytablesBitextIterator_UL.__init__(self, *args, **kwargs)
             self.batch_iter = None
             self.peeked_batch = None
+            self.mode = mode
+            self.val_size=val_size
 
         def get_homogenous_batch_iter(self):
             while True:
                 k_batches = state['sort_k_batches']
                 batch_size = state['bs']
+
                 data = [PytablesBitextIterator_UL.next(self) for k in range(k_batches)]
                 x = numpy.asarray(list(itertools.chain(*map(operator.itemgetter(0), data))))
                 y = numpy.asarray(list(itertools.chain(*map(operator.itemgetter(1), data))))
@@ -182,13 +185,25 @@ def get_batch_iterator(state):
                 for k in range(k_batches):
                     indices = order[k * batch_size:(k + 1) * batch_size]
                     batch = create_padded_batch(state, [x[indices]], [y[indices]],
-                            return_dict=True)
+                            state['seqlen'], return_dict=True)
                     if batch:
                         yield batch
 
+        def get_validation_batch_iter(self):
+            while True:
+                data = [PytablesBitextIterator_UL.next(self)]
+                x = numpy.asarray(data[0][0])
+                y = numpy.asarray(data[0][1])
+
+                yield create_padded_batch(state, [x], [y],
+                                x[0].shape[0], return_dict=True)
+
         def next(self, peek=False):
             if not self.batch_iter:
-                self.batch_iter = self.get_homogenous_batch_iter()
+                if self.mode=='valid':
+                    self.batch_iter = self.get_validation_batch_iter()
+                else:
+                    self.batch_iter = self.get_homogenous_batch_iter()
 
             if self.peeked_batch:
                 # Only allow to peek one batch
@@ -205,16 +220,37 @@ def get_batch_iterator(state):
                 self.peeked_batch = batch
             return batch
 
-    data = Iterator(
+    train_data = Iterator(
         batch_size=int(state['bs']),
         target_file=state['target'],
         can_fit=False,
         queue_size=1000,
         shuffle=state['shuffle'],
         use_infinite_loop=state['use_infinite_loop'],
-        n_words=state['n_sym']
-        )
-    return data
+        n_words=state['n_sym'])
+    '''
+    valid_data = Iterator(
+        mode='valid',
+        val_size=887, # <----------!!! TODO: This is hard coded !!!
+        batch_size=int(1), # <----------!!! TODO: This is hard coded !!!
+        target_file=state['val_target'],
+        can_fit=False,
+        shuffle=False,
+        use_infinite_loop=False,
+        n_words=state['n_sym'])
+    '''
+    valid_data = PytablesBitextIterator_UL(
+        batch_size=int(1), # <----------!!! TODO: This is hard coded !!!
+        val_size=887, # <----------!!! TODO: This is hard coded !!!
+        target_file=state['val_target'],
+        can_fit=True,
+        shuffle=False,
+        use_infinite_loop=True,
+        n_words=state['n_sym'],
+        mode='valid',
+        state=state)
+
+    return train_data, valid_data
 
 class LM_builder(object):
     """
@@ -431,6 +467,32 @@ class LM_builder(object):
 
         return sample_fn
 
+    def build_for_valid(self):
+
+        n_samples = self.x.shape[1]
+
+        x_input = self.inputer(self.x_emb)
+        update_signals = self.updater(self.x_emb)
+        reset_signals = self.reseter(self.x_emb)
+
+        rec_result = self.rec(x_input, mask=self.x_mask,
+                    no_noise_bias=self.state['no_noise_bias'],
+                    batch_size=n_samples,
+                    gater_below=none_if_zero(update_signals),
+                    reseter_below=none_if_zero(reset_signals))
+
+        valid_model = self.output_layer(rec_result,
+                use_noise=False).validate(target=self.y,
+                mask=self.y_mask, sum_over_time=True)
+
+        valid_updates = []
+        valid_fn = theano.function(self.inputs,
+                valid_model.cost,
+                name='valid_fn',
+                updates=valid_updates)
+
+        return valid_fn
+
     def build_for_auxiliary_lm(self, x, prev_hid):
         """
         Build Computational Graph to be used in the beam-search
@@ -487,7 +549,7 @@ class LM_builder(object):
         self.lm_model = LM_Model(
             cost_layer = self.train_model,
             weight_noise_amount=self.state['weight_noise_amount'],
-            valid_fn = None,
+            valid_fn = self.valid_fn,
             indx_word=self.state['indx_word'],
             indx_word_src=self.state['indx_word'],
             clean_before_noise_fn = False,
@@ -506,6 +568,7 @@ def parse_args():
     return parser.parse_args()
 
 if __name__ == '__main__':
+
     # copying construction from experiment/nmt/train.py
     # Grab prototype specified by proto
     args = parse_args()
@@ -521,15 +584,15 @@ if __name__ == '__main__':
 
     rng = numpy.random.RandomState(state['seed'])
 
-    train_data = get_batch_iterator(state)
-    #train_data.start()
+    train_data,valid_data = get_batch_iterator(state)
+    valid_data.start()
     model = LM_builder(state, rng, skip_init=True
                        if state['reload'] else False)
-    logger.debug("Building language model")
+    logger.info("Building language model")
     model.build()
 
     #TODO
-    valid_fn = None
+    valid_fn = model.build_for_valid()
 
     lm_model = LM_Model(
         cost_layer = model.train_model,
@@ -553,8 +616,10 @@ if __name__ == '__main__':
         sample = numpy.insert(sample, 0, state['sampling_seed'])
         print " ".join([idict[si] for si in sample])
 
-    main = MainLoop(train_data, None, None, lm_model, algo, state, None,
+    main = MainLoop(train_data, valid_data, None, lm_model, algo, state, None,
             reset=state['reset'],
+            validate_postprocess=eval(state['validate_postprocess']) if \
+                    hasattr(state,'validate_postprocess') else None,
             hooks= hook_fn
                 if state['hookFreq'] >= 0
                 else None)
@@ -563,4 +628,3 @@ if __name__ == '__main__':
         main.load()
     if state['loopIters'] > 0:
         main.main()
-

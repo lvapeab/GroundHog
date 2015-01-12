@@ -1038,3 +1038,54 @@ def prototype_search_state_with_LM_zh_en_UNION_RAND_FINETUNE_CNTR():
 
     return state
 
+def prototype_search_state_zh_en_without_LM_zhenonly():
+
+    state = prototype_encdec_state()
+
+    state['include_lm'] = False
+    state['reload_lm'] = False
+    state['train_only_readout'] = False
+
+    state['cutoff'] = 1.0
+    state['hookFreq'] =400
+    state['algo'] = 'SGD_adadelta'
+    state['saveFreq'] = 45
+
+    # Source and target sentence
+    state['target']=["/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/zhenonlyWithoutLM/binarized_iwslt.en.shuf.h5"]
+    state['source']=["/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/zhenonlyWithoutLM/binarized_iwslt.zh.shuf.h5"]
+
+    # Word -> Id and Id-> Word Dictionaries
+    state['indx_word']="/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/zhenonlyWithoutLM/ivocab.zh.pkl"
+    state['indx_word_target']="/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/zhenonlyWithoutLM/ivocab.en.pkl"
+    state['word_indx']="/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/zhenonlyWithoutLM/vocab.zh.pkl"
+    state['word_indx_trgt']="/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/zhenonlyWithoutLM/vocab.en.pkl"
+
+    state['source_encoding'] = 'utf8'
+
+    state['null_sym_source']=4839
+    state['null_sym_target']=30000
+
+    state['n_sym_source']=state['null_sym_source'] + 1
+    state['n_sym_target']=state['null_sym_target'] + 1
+
+    state['dec_rec_layer'] = 'RecurrentLayerWithSearch'
+    state['search'] = True
+    state['last_forward'] = False
+    state['forward'] = True
+    state['backward'] = True
+    state['seqlen'] = 50
+    state['sort_k_batches'] = 20
+    state['prefix']='/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/zhenonlyWithoutLM/zhenonly_'
+
+    # bleu validation args
+    state['bleu_script'] = '/data/lisatmp3/firatorh/turkishParallelCorpora/iwslt14/scripts/multi-bleu.perl'
+    state['validation_set'] = '/data/lisatmp3/firatorh/nmt/zh-en_lm/dev/IWSLT14.TED.dev2010.zh-en.zh.xml.txt.trimmed'
+    state['validation_set_grndtruth'] = '/data/lisatmp3/firatorh/nmt/zh-en_lm/dev/IWSLT14.TED.dev2010.zh-en.en.tok'
+    state['validation_set_out']='/data/lisatmp3/firatorh/nmt/zh-en_lm/trainedModels/zhenonlyWithoutLM/zhenonly_valOut.txt'
+    state['output_validation_set'] = True
+    state['beam_size'] = 20
+    state['bleu_val_frequency'] = 5000
+    state['validation_burn_in'] = 0
+
+    return state
