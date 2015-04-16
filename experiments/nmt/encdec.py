@@ -688,6 +688,7 @@ class EncoderDecoderBase(object):
             n_hids=n_hids,
             activation=[self.state['rank_n_activ']],
             name='{}_approx_embdr'.format(self.prefix),
+            learn_bias=True, # TODO: Set this to False
             **self.default_kwargs)
         self.params += self.approx_embedder.params
         # We have 3 embeddings for each word in each level,
@@ -819,6 +820,7 @@ class Encoder(EncoderDecoderBase):
         super(Encoder, self).__init__()
 
         self.num_levels = self.state['encoder_stack']
+
         if "use_hier_enc" in self.state and self.state['use_hier_enc']:
             logger.debug("Using bidirectional hierarchical encoder...")
             logger.debug("Changing state file for bidirectional hierarchical encoder.")
@@ -928,7 +930,6 @@ class Encoder(EncoderDecoderBase):
 
         hidden_layers = []
         betas = []
-        import ipdb;ipdb.set_trace()
         if self.num_levels < 1:
             if x.ndim == 1:
                 hidden_layers = [approx_embeddings.reshape([x.shape[0], self.state['dim']])]
@@ -944,24 +945,26 @@ class Encoder(EncoderDecoderBase):
                     input_signals[level] += self.inputers[level](hidden_layers[-1])
                     update_signals[level] += self.updaters[level](hidden_layers[-1])
                     reset_signals[level] += self.reseters[level](hidden_layers[-1])
-                res = self.transitions[level](input_signals[level],
-                                              nsteps=x.shape[0],
-                                              batch_size=x.shape[1] if x.ndim == 2 else 1,
-                                              mask=x_mask,
-                                              gater_below=none_if_zero(update_signals[level]),
-                                              reseter_below=none_if_zero(reset_signals[level]),
-                                              use_noise=use_noise)
 
-                # Unpack if DoubleRecurrentLayer
                 if self.state['use_hier_enc'] and \
                         'DoubleRecurrentLayer' == self.state['enc_rec_layer']:
-                    betas.append(res[1])
-                    result = res[0]
+                    result, beta = self.transitions[level](input_signals[level],
+                                                  nsteps=x.shape[0],
+                                                  batch_size=x.shape[1] if x.ndim == 2 else 1,
+                                                  mask=x_mask,
+                                                  gater_below=none_if_zero(update_signals[level]),
+                                                  reseter_below=none_if_zero(reset_signals[level]),
+                                                  use_noise=use_noise)
+                    betas.append(beta)
                 else:
-                    result = res
-
+                    result = self.transitions[level](input_signals[level],
+                                                  nsteps=x.shape[0],
+                                                  batch_size=x.shape[1] if x.ndim == 2 else 1,
+                                                  mask=x_mask,
+                                                  gater_below=none_if_zero(update_signals[level]),
+                                                  reseter_below=none_if_zero(reset_signals[level]),
+                                                  use_noise=use_noise)
                 hidden_layers.append(result)
-
         if return_hidden_layers:
             assert self.state['encoder_stack'] <= 1
             if self.state['use_hier_enc'] and \
@@ -1094,7 +1097,7 @@ class Decoder(EncoderDecoderBase):
                                             #weight_noise=self.state['weight_noise'],
                                             n_hids=[1],
                                             activation=[act_str],
-                                            bias_scale=[-1.2],
+                                            bias_scale=[self.state['init_ctlr_bias']],
                                             name='lm_controller')
 
             self.readout_params += self.lm_controller.params
@@ -1705,7 +1708,7 @@ class RNNEncoderDecoder(object):
         self.skip_init = skip_init
         self.compute_alignment = compute_alignment
 
-        if "use_hier_enc" in self.state:
+        if "use_hier_enc" in self.state and self.state['use_hier_enc']:
             logger.debug("Using bidirectional hierarchical encoder...")
             logger.debug("Changing state file for bidirectional hierarchical encoder.")
             self.state['forward'] = True
@@ -1751,7 +1754,6 @@ class RNNEncoderDecoder(object):
         self.encoder.create_layers()
 
         logger.debug("Build encoding computation graph")
-        import ipdb;ipdb.set_trace()
         if self.state['use_hier_enc'] and \
             self.state['enc_rec_layer'] == 'DoubleRecurrentLayer':
             forward_training_c, self.betas = self.encoder.build_encoder(

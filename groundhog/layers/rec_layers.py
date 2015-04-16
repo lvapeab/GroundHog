@@ -2504,10 +2504,11 @@ class DoubleRecurrentLayer(Layer):
         updates += updates2
 
         if new_h.ndim == 3:
-            self.out = new_h * betas[:,:,None]
+            rval[0] = new_h * betas[:,:,None]
         else:
-            self.out = new_h * betas[:,None]
+            rval[0] = new_h * betas[:,None]
 
+        self.out = rval
         self.rval = rval
         self.updates = updates
 

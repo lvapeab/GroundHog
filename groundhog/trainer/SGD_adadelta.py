@@ -92,9 +92,13 @@ class SGD(object):
         self.prop_exprs = [x[1] for x in model.properties]
         self.prop_names = [x[0] for x in model.properties]
         self.update_rules = [x[1] for x in model.updates]
-        import ipdb;ipdb.set_trace()
+        if model.lm_alpha:
+            last_two = [model.lm_alpha.out, model.train_cost]
+        else:
+            last_two = [model.train_cost]
+
         rval = theano.clone(_param_grads + self.update_rules + \
-                            self.prop_exprs + [model.train_cost],
+                            self.prop_exprs + last_two,
                             replace=zip(model.inputs, loc_data))
         nparams = len(_params)
         nouts = len(self.prop_exprs)
@@ -158,10 +162,12 @@ class SGD(object):
         self.old_cost = 1e20
         self.schedules = model.get_schedules()
         self.return_names = self.prop_names + \
-                ['cost',
-                        'error',
-                        'time_step',
-                        'whole_time', 'lr']
+                        ['cost',
+                         'error',
+                         'time_step',
+                         'whole_time',
+                         'avg_alpha',
+                         'lr']
         self.prev_batch = None
 
     def __call__(self):
@@ -191,6 +197,9 @@ class SGD(object):
         g_ed = time.time()
         self.state['lr'] = float(self.lr)
         cost = rvals[-1]
+
+        avg_alpha = numpy.mean(numpy.mean(rvals[-2], axis=0)) \
+                        if self.model.lm_alpha else 0.0
         self.old_cost = cost
         whole_time = time.time() - self.step_timer
         if self.step % self.state['trainFreq'] == 0:
@@ -199,15 +208,17 @@ class SGD(object):
             for dx, prop in enumerate(self.prop_names):
                 msg += ' '+prop+' %.2e'
                 vals += [float(numpy.array(rvals[dx]))]
-            msg += ' step time %s whole time %s lr %.2e'
+            msg += ' step time %s whole time %s avg_alpha %.3f lr %.2e'
             vals += [print_time(g_ed - g_st),
                      print_time(time.time() - self.step_timer),
+                     float(avg_alpha),
                      float(self.lr)]
             print msg % tuple(vals)
         self.step += 1
         ret = dict([('cost', float(cost)),
                     ('error', float(cost)),
-                       ('lr', float(self.lr)),
-                       ('time_step', float(g_ed - g_st)),
-                       ('whole_time', float(whole_time))]+zip(self.prop_names, rvals))
+                    ('lr', float(self.lr)),
+                    ('time_step', float(g_ed - g_st)),
+                    ('whole_time', float(whole_time)),
+                    ('avg_alpha', float(avg_alpha))]+zip(self.prop_names, rvals))
         return ret

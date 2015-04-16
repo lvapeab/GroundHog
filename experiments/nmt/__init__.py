@@ -70,5 +70,12 @@ from state import prototype_state, \
                   prototype_search_state_fi_en_without_LM_WMT_ADADELTA, \
                   prototype_search_state_fi_en_without_LM_WMT_ADADELTA_40k, \
                   prototype_search_state_tr_en_withoutLM_fast_hierV0, \
-                  prototype_search_state_tr_en_withoutLM_fast_hier_TEST_BETAS
+                  prototype_search_state_tr_en_withoutLM_fast_hier_TEST_BETAS, \
+                  prototype_search_state_fi_en_without_LM_WMT_ADAM_40k, \
+                  prototype_search_state_fi_en_without_LM_WMT_ADAM_40k_CONT, \
+                  prototype_search_state_DEBUG, \
+                  prototype_search_state_fi_en_withLM_gigaword_adadelta_LMController, \
+                  prototype_search_state_fi_en_withLM_gigaword_adadelta_LMController_cont, \
+                  prototype_search_state_fi_en_withLM_gigaword_adadelta_LMController_resetReadout,\
+                  prototype_search_state_cs_en_40k_WMT_ADADELTA
 

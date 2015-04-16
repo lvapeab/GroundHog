@@ -23,7 +23,7 @@ args = parser.parse_args()
 class Index(tables.IsDescription):
     pos = tables.UInt32Col()
     length = tables.UInt32Col()
-import ipdb;ipdb.set_trace()
+
 f = args.output
 f = tables.open_file(f.name, f.mode)
 earrays = f.createEArray(f.root, 'phrases',

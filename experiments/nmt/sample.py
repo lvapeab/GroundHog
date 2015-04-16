@@ -63,6 +63,7 @@ class BeamSearch(object):
 
         trans = [[]]
         costs = [0.0]
+        import ipdb;ipdb.set_trace()
         for k in range(3 * len(seq)):
             if n_samples == 0:
                 break
@@ -91,7 +92,6 @@ class BeamSearch(object):
                 log_probs = numpy.log(self.comp_next_probs(c, k, last_words, *states)[0])
             '''
             log_probs = numpy.log(self.comp_next_probs(c, k, last_words, states_lm, states_mem_lm, *states)[0])
-
 
             # Adjust log probs according to search restrictions
             if ignore_unk:
@@ -210,6 +210,7 @@ def sample(lm_model, seq, n_samples,
         alpha=1, verbose=False):
     if beam_search:
         sentences = []
+        import ipdb;ipdb.set_trace()
         trans, costs = beam_search.search(seq, n_samples,
                 ignore_unk=ignore_unk, minlen=len(seq) / 2)
         if normalize:
@@ -226,7 +227,7 @@ def sample(lm_model, seq, n_samples,
         sentences = []
         all_probs = []
         costs = []
-
+        import ipdb;ipdb.set_trace()
         values, cond_probs = sampler(n_samples, 3 * (len(seq) - 1), alpha, seq)
         for sidx in xrange(n_samples):
             sen = []
@@ -292,7 +293,6 @@ def parse_args():
 
 def main():
     args = parse_args()
-
     state = prototype_state()
     with open(args.state) as src:
         state.update(cPickle.load(src))
@@ -307,7 +307,7 @@ def main():
     enc_dec.state['weight_noise'] = False
     enc_dec.state['weight_noise_amount'] = 0.
     enc_dec.state['use_noise'] = False
-
+    enc_dec.state['dropout'] = 1.0
     enc_dec.build()
 
     lm_model = enc_dec.create_lm_model()
@@ -396,7 +396,7 @@ def main():
                 print "Exception while parsing your input:"
                 traceback.print_exc()
                 continue
-
+            import ipdb;ipdb.set_trace()
             sample(lm_model, seq, n_samples, sampler=sampler,
                     beam_search=beam_search,
                     ignore_unk=args.ignore_unk, normalize=args.normalize,

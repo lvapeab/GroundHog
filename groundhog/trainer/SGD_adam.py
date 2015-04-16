@@ -82,7 +82,7 @@ class SGD(object):
         self.mean_gs = [shared_clone(p, name="mean_gs_%s" % p.name) for p in _params]
         self.updirs = [shared_clone(p, name="updir_%s" % p.name) for p in _params]
 
-        i = theano.shared(0., name="i_t")
+        i = theano.shared(0., name="i")
         i_t = i + 1.0
 
         lr = TT.scalar('lr')
@@ -112,10 +112,13 @@ class SGD(object):
         self.prop_names = [x[0] for x in model.properties]
         self.update_rules = [x[1] for x in model.updates]
 
-        rval = theano.clone(_param_grads + self.update_rules + \
-                            self.prop_exprs + [model.train_cost] +
-                            [model.lm_alpha.out],
-                            replace=zip(model.inputs, loc_data))
+        clone_inputs = _param_grads + self.update_rules + \
+                       self.prop_exprs + [model.train_cost]
+        if model.lm_alpha:
+            clone_inputs += [model.lm_alpha.out]
+        else:
+            clone_inputs += [theano.shared(numpy.zeros((1,)), theano.config.floatX)]
+        rval = theano.clone(clone_inputs, replace=zip(model.inputs, loc_data))
 
         nparams = len(_params)
 
@@ -167,6 +170,7 @@ class SGD(object):
         updates += store_rms
         updates += store_mgs
         updates += store_updirs
+        updates.append((i, i_t))
 
         print('Compiling grad function')
         st = time.time()
@@ -179,7 +183,7 @@ class SGD(object):
         print 'took', time.time() - st
 
         self.lr = numpy.float32(state['lr'])
-        new_params = [p + lr * ud[0] for p, ud in zip(_params, store_updirs)]
+        new_params = [p + lr_t * ud[0] for p, ud in zip(_params, store_updirs)]
         p_updates = zip(_params, new_params)
 
         self.update_fn = theano.function([lr], [],
