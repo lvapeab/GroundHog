@@ -189,3 +189,12 @@ def dbg_hook(hook, x):
         return x
     else:
         return theano.printing.Print(global_fn=hook)(x)
+
+def name2pos(param_list):
+    d = {}
+    i = 0
+    for p in param_list:
+        d[p.name] = i
+        i += 1
+    return d
+

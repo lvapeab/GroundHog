@@ -63,7 +63,7 @@ class BeamSearch(object):
 
         trans = [[]]
         costs = [0.0]
-        import ipdb;ipdb.set_trace()
+
         for k in range(3 * len(seq)):
             if n_samples == 0:
                 break
@@ -210,7 +210,6 @@ def sample(lm_model, seq, n_samples,
         alpha=1, verbose=False):
     if beam_search:
         sentences = []
-        import ipdb;ipdb.set_trace()
         trans, costs = beam_search.search(seq, n_samples,
                 ignore_unk=ignore_unk, minlen=len(seq) / 2)
         if normalize:
@@ -227,7 +226,6 @@ def sample(lm_model, seq, n_samples,
         sentences = []
         all_probs = []
         costs = []
-        import ipdb;ipdb.set_trace()
         values, cond_probs = sampler(n_samples, 3 * (len(seq) - 1), alpha, seq)
         for sidx in xrange(n_samples):
             sen = []
@@ -333,7 +331,7 @@ def main():
         fsrc = open(args.source, 'r')
         ftrans = open(args.trans, 'w')
         if args.scores:
-            fidx_scores = open(args.trans + '_SCORES')
+            fidx_scores = open(args.trans + '_SCORES', 'w')
         start_time = time.time()
 
         n_samples = args.beam_size

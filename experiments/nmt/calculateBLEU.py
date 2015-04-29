@@ -70,6 +70,9 @@ def parse_args():
     parser.add_argument("--eta",
         default=0.5, type=float,
         help="Balancing parameter between TM and LM log-probs")
+    parser.add_argument("--append-bleu",
+        action="store_true", default=False,
+        help="append bleu score to output file")
     return parser.parse_args()
 
 def main():
@@ -163,10 +166,11 @@ def main():
         val_bleu_validator.best_bleu = numpy.inf
         val_bleu_validator()
         val_bleu_score = val_bleu_validator.val_bleu_curve[-1]
-        os.rename(args.val_out,
-                  '%s-%sBLEU%2.2f' % (args.val_out,
-                                      'NORMALIZED_' if args.normalize else '',
-                                      val_bleu_score))
+        if args.append_bleu:
+            os.rename(args.val_out,
+                      '%s-%sBLEU%2.2f' % (args.val_out,
+                                          'NORMALIZED_' if args.normalize else '',
+                                          val_bleu_score))
 
     if tst_src is not None and tst_gld is not None and tst_src != '-1':
         state['validation_set_out'] = args.tst_out
@@ -183,10 +187,11 @@ def main():
         tst_bleu_validator.best_bleu = numpy.inf
         tst_bleu_validator()
         tst_bleu_score = tst_bleu_validator.val_bleu_curve[-1]
-        os.rename(args.tst_out,
-                  '%s-%sBLEU%2.2f' % (args.tst_out,
-                                      'NORMALIZED_' if args.normalize else '',
-                                      tst_bleu_score))
+        if args.append_bleu:
+            os.rename(args.tst_out,
+                      '%s-%sBLEU%2.2f' % (args.tst_out,
+                                          'NORMALIZED_' if args.normalize else '',
+                                          tst_bleu_score))
 
     print 'val bleu = %2.2f' % val_bleu_score
     print 'tst bleu = %2.2f' % tst_bleu_score

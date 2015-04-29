@@ -174,7 +174,6 @@ class BeamSearch(object):
             word_indices = best_costs_indices_tm % voc_size
 
             # get the geometric mean here
-            import ipdb;ipdb.set_trace()
             if self.weight_lm_only:
                 costs = [flat_next_costs_tm[ww] + (1-self.eta) * flat_next_costs_lm[ww]
                             if (ww != self.eos_id or ww != self.unk_id)

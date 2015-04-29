@@ -77,5 +77,11 @@ from state import prototype_state, \
                   prototype_search_state_fi_en_withLM_gigaword_adadelta_LMController, \
                   prototype_search_state_fi_en_withLM_gigaword_adadelta_LMController_cont, \
                   prototype_search_state_fi_en_withLM_gigaword_adadelta_LMController_resetReadout,\
-                  prototype_search_state_cs_en_40k_WMT_ADADELTA
+                  prototype_search_state_cs_en_40k_WMT_ADADELTA, \
+                  prototype_search_state_fi_en_without_LM_WMT_ADADELTA_40k_RESHUF, \
+                  prototype_search_state_fi_en_withLM_gigaword_adadelta_LMController_reshuf0,\
+                  prototype_search_state_fi_en_withLM_gigaword_adadelta_TMController_reshuf0,\
+                  prototype_search_state_fi_en_withLM_gigaword_adadelta_LMController_reshuf1,\
+                  prototype_search_state_fi_en_withLM_gigaword_adadelta_vecLMController_reshuf1_noNoise,\
+                  prototype_search_state_fi_en_withLM_gigaword_adadelta_vecLMController_reshuf1_noNoise_TEST
 

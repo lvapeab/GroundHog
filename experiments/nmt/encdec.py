@@ -30,7 +30,8 @@ from groundhog.datasets import PytablesBitextIterator
 from groundhog.utils import (sample_zeros, \
                              sample_weights_orth, \
                              init_bias, \
-                             sample_weights_classic)
+                             sample_weights_classic,
+                             name2pos)
 
 import groundhog.utils as utils
 
@@ -688,7 +689,7 @@ class EncoderDecoderBase(object):
             n_hids=n_hids,
             activation=[self.state['rank_n_activ']],
             name='{}_approx_embdr'.format(self.prefix),
-            learn_bias=True, # TODO: Set this to False
+            learn_bias=False, # TODO: Set this to False
             **self.default_kwargs)
         self.params += self.approx_embedder.params
         # We have 3 embeddings for each word in each level,
@@ -1024,13 +1025,13 @@ class Decoder(EncoderDecoderBase):
             self.state['controller_temp'] = 1.0
 
         if 'init_ctlr_bias' not in self.state:
-            self.state['init_ctlr_bias'] = -1
+            self.state['init_ctlr_bias'] = -1.0
 
         if 'rho' not in self.state:
             self.state['rho'] = 0.5
 
         if 'use_lm_control' not in self.state:
-            self.state['use_lm_control'] = False
+            self.state['use_lm_control'] = -1
 
         # should we really keep these separate?
         #if self.state['include_lm']:
@@ -1087,19 +1088,49 @@ class Decoder(EncoderDecoderBase):
         # controller mlp for external language model,
         # generates a scaler btw [0,1] to weight language
         # model path, and conditioned on hidden_state_lm
-        if self.state['use_lm_control']:
+        if self.state['use_lm_control'] == 1:
             act_str ='lambda x: TT.nnet.sigmoid(x / %f)' % self.state['controller_temp']
             self.lm_controller = MultiLayer(self.rng,
                                             n_in=self.state['lm_readout_dim'],
-                                            #n_hids=[self.state['dim'], 1],
-                                            #activation=['lambda x: TT.tanh(x)', 'lambda x: TT.nnet.sigmoid(x)'],
-                                            #bias_scale=[self.state['bias']]*2,
-                                            #weight_noise=self.state['weight_noise'],
-                                            n_hids=[1],
+                                            n_hids=[1] if not
+                                            self.state['vector_controller'] else
+                                            [self.state['dim']],
                                             activation=[act_str],
                                             bias_scale=[self.state['init_ctlr_bias']],
                                             name='lm_controller')
+            self.readout_params += self.lm_controller.params
 
+        elif self.state['use_lm_control'] == 2:
+            act_str ='lambda x: TT.nnet.sigmoid(x / %f)' % self.state['controller_temp']
+            self.lm_controller = MultiLayer(self.rng,
+                                            n_in=self.state['dim'],
+                                            n_hids=[1] if not
+                                            self.state['vector_controller']
+                                            else [self.state['dim']],
+                                            activation=[act_str],
+                                            bias_scale=[self.state['init_ctlr_bias']],
+                                            name='lm_controller')
+            self.readout_params += self.lm_controller.params
+
+        elif self.state['use_lm_control'] == 3:
+            act_str ='lambda x: TT.nnet.sigmoid(x / %f)' % self.state['controller_temp']
+            self.lm_controller_lm = MultiLayer(self.rng,
+                                               n_in=self.state['lm_readout_dim'],
+                                               n_hids=[1] if not
+                                               self.state['vector_controller']
+                                               else [self.state['dim']],
+                                               activation=[act_str],
+                                               bias_scale=[self.state['init_ctlr_bias']],
+                                               name='lm_controller')
+            self.lm_controller_tm = MultiLayer(self.rng,
+                                               n_in=self.state['dim'],
+                                               n_hids=[1] if not
+                                               self.state['vector_controller']
+                                               else [self.state['dim']],
+                                               activation=[act_str],
+                                               bias_scale=[self.state['init_ctlr_bias']],
+                                               name='lm_controller')
+            self.lm_controller = lambda x, y: TT.nnet.sigmoid(self.lm_controller_lm(x) + self.lm_controller_tm(y))
             self.readout_params += self.lm_controller.params
 
         act = lambda x: 1 - x
@@ -1489,45 +1520,126 @@ class Decoder(EncoderDecoderBase):
         if self.state['include_lm']:
             if self.state['use_arctic_lm']:
                 lstm_y = y
-                lm_hidden_state, lm_memory = get_layer_graph(dim_word = self.state['rank_n_approx'],
+                lm_hidden_state, lm_memory = get_layer_graph(dim_word=self.state['rank_n_approx'],
                                                              dim=self.state['lm_readout_dim'],
-                                                             n_words = self.state['null_sym_target'],
-                                                             batch_size = self.state['bs'],
-                                                             modelpath = self.state['modelpath'],
-                                                             prev_state = prev_hid,
+                                                             n_words=self.state['null_sym_target'],
+                                                             batch_size=self.state['bs'],
+                                                             modelpath=self.state['modelpath'],
+                                                             prev_state=prev_hid,
                                                              reload_=True,
-                                                             prev_mem = prev_memory,
-                                                             mode = mode,
-                                                             inp = lstm_y)
+                                                             prev_mem=prev_memory,
+                                                             mode=mode,
+                                                             inp=lstm_y)
             else:
                 lm_hidden_state = self.LM_builder.build_for_translation(y, y_mask, prev_hid=prev_hid)
 
             check_first_word = (y > 0
                 if self.state['check_first_word']
                 else TT.ones((y.shape[0]), dtype="float32"))
-            if self.state['use_lm_control']:
+
+            # Condition on lm only based controller
+            if self.state['use_lm_control'] == 1:
                 if mode != Decoder.EVALUATION:
                     lm_hidden_state = TT.switch(check_first_word[:,None],
                                                 lm_hidden_state, 0. * lm_hidden_state)
 
                     lm_alpha = self.lm_controller(lm_hidden_state)
                     readout_lm = TT.shape_padright(check_first_word) * self.lm_embedder(lm_hidden_state).out
-                    readout_lm = (lm_alpha.reshape((readout_lm.shape[0], 1)) * readout_lm).reshape(readout.out.shape)
+                    readout_lm = (lm_alpha.reshape((readout_lm.shape[0],
+                                                    1 if not
+                                                    self.state['vector_controller']
+                                                    else self.state['dim'])) * readout_lm).reshape(readout.out.shape)
                     readout += readout_lm
 
                 else:
                     lm_alpha = self.lm_controller(Shift()(lm_hidden_state))
                     if y.ndim == 1:
-                        lm_alpha = lm_alpha.reshape((y.shape[0], 1, 1))
+                        lm_alpha = lm_alpha.reshape((y.shape[0], 1,
+                                                     1 if not
+                                                     self.state['vector_controller']
+                                                     else self.state['dim']))
                         readout_lm = self.lm_embedder(lm_hidden_state).reshape(
                                              (y.shape[0], 1, self.state['dim']))
                         readout_lm = Shift()(readout_lm).reshape(readout.out.shape)
                     else:
-                        lm_alpha = lm_alpha.reshape((y.shape[0], y.shape[1], 1))
+                        lm_alpha = lm_alpha.reshape((y.shape[0], y.shape[1],
+                                                     1 if not
+                                                     self.state['vector_controller']
+                                                     else self.state['dim']))
                         readout_lm = self.lm_embedder(lm_hidden_state).reshape((y.shape[0], y.shape[1], self.state['dim']))
                         readout_lm = Shift()(readout_lm)
 
                     readout += (lm_alpha * readout_lm).reshape(readout.out.shape)
+
+            # Condition on tm only based controller
+            elif self.state['use_lm_control'] == 2:
+                if mode != Decoder.EVALUATION:
+                    lm_hidden_state = TT.switch(check_first_word[:,None],
+                                                lm_hidden_state, 0. * lm_hidden_state)
+
+                    lm_alpha = self.lm_controller(readout)
+                    readout_lm = TT.shape_padright(check_first_word) * self.lm_embedder(lm_hidden_state).out
+                    readout_lm = (lm_alpha.reshape((readout_lm.shape[0],
+                                                    1 if not
+                                                    self.state['vector_controller']
+                                                    else self.state['dim'])) * readout_lm).reshape(readout.out.shape)
+                    readout += readout_lm
+
+                else:
+                    lm_alpha = self.lm_controller(readout)
+                    if y.ndim == 1:
+                        lm_alpha = lm_alpha.reshape((y.shape[0], 1,
+                                                    1 if not
+                                                    self.state['vector_controller']
+                                                    else self.state['dim']))
+                        readout_lm = self.lm_embedder(lm_hidden_state).reshape(
+                                             (y.shape[0], 1, self.state['dim']))
+                        readout_lm = Shift()(readout_lm).reshape(readout.out.shape)
+                    else:
+                        lm_alpha = lm_alpha.reshape((y.shape[0], y.shape[1],
+                                                    1 if not
+                                                    self.state['vector_controller']
+                                                    else self.state['dim']))
+                        readout_lm = self.lm_embedder(lm_hidden_state).reshape((y.shape[0], y.shape[1], self.state['dim']))
+                        readout_lm = Shift()(readout_lm)
+
+                    readout += (lm_alpha * readout_lm).reshape(readout.out.shape)
+
+            # Conditiona on both tm and lm based controller
+            elif self.state['use_lm_control'] == 3:
+                if mode != Decoder.EVALUATION:
+                    lm_hidden_state = TT.switch(check_first_word[:,None],
+                                                lm_hidden_state, 0. * lm_hidden_state)
+
+                    lm_alpha = self.lm_controller(readout, lm_hidden_state)
+                    readout_lm = TT.shape_padright(check_first_word) * self.lm_embedder(lm_hidden_state).out
+                    readout_lm = (lm_alpha.reshape((readout_lm.shape[0],
+                                                    1 if not
+                                                    self.state['vector_controller']
+                                                    else self.state['dim'])) * readout_lm).reshape(readout.out.shape)
+                    readout += readout_lm
+
+                else:
+                    lm_alpha = self.lm_controller(readout, Shift()(lm_hidden_state))
+                    if y.ndim == 1:
+                        lm_alpha = lm_alpha.reshape((y.shape[0], 1,
+                                                    1 if not
+                                                    self.state['vector_controller']
+                                                    else self.state['dim']))
+                        readout_lm = self.lm_embedder(lm_hidden_state).reshape(
+                                             (y.shape[0], 1, self.state['dim']))
+                        readout_lm = Shift()(readout_lm).reshape(readout.out.shape)
+                    else:
+                        lm_alpha = lm_alpha.reshape((y.shape[0], y.shape[1],
+                                                    1 if not
+                                                    self.state['vector_controller']
+                                                    else self.state['dim']))
+                        readout_lm = self.lm_embedder(lm_hidden_state).reshape((y.shape[0], y.shape[1], self.state['dim']))
+                        readout_lm = Shift()(readout_lm)
+
+                    readout += (lm_alpha * readout_lm).reshape(readout.out.shape)
+
+            # No lm controller, take convex combination by rho
             else:
                 if mode != Decoder.EVALUATION:
                     lm_hidden_state = TT.switch(check_first_word[:,None],
@@ -1735,6 +1847,8 @@ class RNNEncoderDecoder(object):
             self.state['optimize_probs'] = True
         if 'use_hier_enc' not in self.state:
             self.state['use_hier_enc'] = False
+        if 'vector_controller' not in self.state:
+            self.state['vector_controller'] = False
 
     def build(self, use_noise=True):
         logger.debug("Create input variables")
@@ -1939,6 +2053,7 @@ class RNNEncoderDecoder(object):
                                  rng=self.rng,
                                  exclude_params=excluded_params)
         self.lm_model.lm_alpha = self.lm_alpha
+        self.lm_model.name2pos = name2pos(self.lm_model.params)
         self.lm_model.load_dict(self.state)
         logger.debug("Model params:\n{}".format(
             pprint.pformat(sorted([p.name for p in self.lm_model.params]))))

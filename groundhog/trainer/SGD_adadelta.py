@@ -198,8 +198,13 @@ class SGD(object):
         self.state['lr'] = float(self.lr)
         cost = rvals[-1]
 
-        avg_alpha = numpy.mean(numpy.mean(rvals[-2], axis=0)) \
-                        if self.model.lm_alpha else 0.0
+        if self.state['vector_controller']:
+            avg_alpha = numpy.mean(numpy.mean(rvals[-2].mean(axis=2),
+                                              axis=0)) \
+                            if self.model.lm_alpha else 0.0
+        else:
+            avg_alpha = numpy.mean(numpy.mean(rvals[-2], axis=0)) \
+                            if self.model.lm_alpha else 0.0
         self.old_cost = cost
         whole_time = time.time() - self.step_timer
         if self.step % self.state['trainFreq'] == 0:
@@ -208,7 +213,7 @@ class SGD(object):
             for dx, prop in enumerate(self.prop_names):
                 msg += ' '+prop+' %.2e'
                 vals += [float(numpy.array(rvals[dx]))]
-            msg += ' step time %s whole time %s avg_alpha %.3f lr %.2e'
+            msg += ' step time %s whole time %s avg_alpha %.5f lr %.2e'
             vals += [print_time(g_ed - g_st),
                      print_time(time.time() - self.step_timer),
                      float(avg_alpha),

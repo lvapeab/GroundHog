@@ -3451,3 +3451,337 @@ def prototype_search_state_cs_en_40k_WMT_ADADELTA():
     state['validation_burn_in'] = 20000
 
     return state
+
+def prototype_search_state_fi_en_without_LM_WMT_ADADELTA_40k_RESHUF():
+
+    state = prototype_search_state_fi_en_without_LM_WMT_ADADELTA()
+
+    state['seed'] = 4603
+
+    state['prefix']='/data/lisatmp3/firatorh/nmt/wmt15/trainedModels/withoutLM/refGHOG_adadelta_40k_reshuf_'
+    state['source'] = ["/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/processed/binarized_text.fi.reshuf.h5"]
+    state['target'] = ["/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/processed/binarized_text.en.reshuf.h5"]
+    state['indx_word'] = "/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/processed/ivocab.fi.pkl"
+    state['indx_word_target'] = "/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/processed/ivocab.en.pkl"
+    state['word_indx'] = "/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/processed/vocab.fi.pkl"
+    state['word_indx_trgt'] = "/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/processed/vocab.en.pkl"
+
+    state['reload'] = True
+    state['reload_lm'] = False
+
+    state['use_noise'] = True
+    state['dropout'] = 0.5
+    state['weight_noise'] = True
+    state['weight_noise_rec'] = False
+    state['weight_noise_amount'] = 0.01
+    state['optimize_probs'] = False
+
+    state['enc_rec_layer'] = 'RecurrentLayer'
+    state['bs'] = 80
+    state['cutoff'] = 10.0
+    state['algo'] = 'SGD_adadelta'
+    state['saveFreq'] = 30
+    state['hookFreq'] = 30
+
+    state['seqlen'] = 50
+    state['sort_k_batches'] = 20
+
+    state['null_sym_source']=40000
+    state['null_sym_target']=40000
+
+    state['n_sym_source']=state['null_sym_source'] + 1
+    state['n_sym_target']=state['null_sym_target'] + 1
+
+    # bleu validation args
+    state['bleu_script'] = '/data/lisatmp3/firatorh/turkishParallelCorpora/iwslt14/scripts/multi-bleu.perl'
+    state['validation_set_out']= '/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/processed/refGHOG_adadelta_40k_reshuf_out.txt'
+    state['validation_set'] = '/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/dev/newsdev2015_1.tok.seg.fi'
+    state['validation_set_grndtruth'] = '/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/dev/newsdev2015_1.tok.en'
+    state['output_validation_set'] = True
+    state['beam_size'] = 20
+    state['bleu_val_frequency'] = 5000
+    state['validation_burn_in'] = 75000
+
+    return state
+
+def prototype_search_state_fi_en_withLM_gigaword_adadelta_LMController_reshuf0():
+
+    state = prototype_search_state_fi_en_withLM_gigaword_adadelta_LMController()
+
+    state['prefix']='/data/lisatmp3/firatorh/nmt/wmt15/trainedModels/deepFusion/fused_GHOG_adadelta_40k_reshuf0_'
+
+    state['seed'] = 4321
+
+    state['algo'] = 'SGD_adadelta'
+    state['lr'] = 1e-6
+    state['dim'] = 1000
+    state['dim_lm'] = 2000
+    state['lm_readout_dim'] = 2000
+    state['bs'] = 80
+
+    state['include_lm'] = True
+    state['reload_lm'] = True
+    state['reload'] = True
+    state['train_only_readout'] = True
+    state['random_readout'] = False
+
+    state['controller_temp'] = 1.0
+    state['use_lm_control'] = 1
+    state['use_arctic_lm'] = True
+    state['init_ctlr_bias'] = -1.0
+    state['rho'] = 0.0 # this is only used if use_lm_control=False
+
+    state['use_noise'] = True
+    state['dropout'] = 0.5
+    state['modelpath'] = '/data/lisatmp3/firatorh/nmt/wmt15/trainedModels/deepFusion/lstm40k_intersect_ppl78_model.npz'
+
+    state['weight_noise'] = True
+    state['weight_noise_rec'] = False
+    state['weight_noise_amount'] = 0.05
+    state['optimize_probs'] = False
+
+    state['saveFreq'] = 30
+    state['cutoff'] = 10.0
+    state['hookFreq'] = 30
+
+    # Source and target sentence
+    state['source'] = ["/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/processed/binarized_text.reshuf0.fi.h5"]
+    state['target'] = ["/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/processed/binarized_text.reshuf0.en.h5"]
+
+    # bleu validation args
+    state['validation_set'] = '/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/dev/newsdev2015_1.tok.seg.fi'
+    state['validation_set_grndtruth'] ='/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/dev/newsdev2015_1.tok.en'
+    state['validation_set_out']='/data/lisatmp3/firatorh/nmt/wmt15/trainedModels/deepFusion/fused_GHOG_adadelta_40k_reshuf0_out.txt'
+
+    state['output_validation_set'] = True
+    state['beam_size'] = 20
+    state['bleu_val_frequency'] = 2000
+    state['validation_burn_in'] = 5000
+
+    return state
+
+def prototype_search_state_fi_en_withLM_gigaword_adadelta_LMController_reshuf1():
+
+    state = prototype_search_state_fi_en_withLM_gigaword_adadelta_LMController()
+
+    state['prefix']='/data/lisatmp3/firatorh/nmt/wmt15/trainedModels/deepFusion/fused_GHOG_adadelta_40k_reshuf1_'
+
+    state['seed'] = 5413
+
+    state['algo'] = 'SGD_adadelta'
+    state['lr'] = 1e-6
+    state['dim'] = 1000
+    state['dim_lm'] = 2000
+    state['lm_readout_dim'] = 2000
+    state['bs'] = 80
+
+    state['include_lm'] = True
+    state['reload_lm'] = True
+    state['reload'] = True
+    state['train_only_readout'] = True
+    state['random_readout'] = False
+
+    state['controller_temp'] = 1.0
+    state['use_lm_control'] = 1
+    state['use_arctic_lm'] = True
+    state['init_ctlr_bias'] = -1.0
+    state['rho'] = 0.0 # this is only used if use_lm_control=False
+
+    state['use_noise'] = True
+    state['dropout'] = 0.5
+    state['modelpath'] = '/data/lisatmp3/firatorh/nmt/wmt15/trainedModels/deepFusion/lstm40k_intersect_ppl78_model.npz'
+
+    state['weight_noise'] = False
+    state['weight_noise_rec'] = False
+    state['weight_noise_amount'] = 0.0
+    state['optimize_probs'] = False
+
+    state['saveFreq'] = 30
+    state['cutoff'] = 5.0
+    state['hookFreq'] = 30
+
+    # Source and target sentence
+    state['source'] = ["/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/processed/binarized_text.reshuf1.fi.h5"]
+    state['target'] = ["/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/processed/binarized_text.reshuf1.en.h5"]
+
+    # bleu validation args
+    state['validation_set'] = '/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/dev/newsdev2015_2.tok.seg.fi'
+    state['validation_set_grndtruth'] ='/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/dev/newsdev2015_2.tok.en'
+    state['validation_set_out']='/data/lisatmp3/firatorh/nmt/wmt15/trainedModels/deepFusion/fused_GHOG_adadelta_40k_reshuf1_out.txt'
+
+    state['output_validation_set'] = True
+    state['beam_size'] = 20
+    state['bleu_val_frequency'] = 2000
+    state['validation_burn_in'] = 0
+
+    return state
+
+def prototype_search_state_fi_en_withLM_gigaword_adadelta_TMController_reshuf0():
+
+    state = prototype_search_state_fi_en_withLM_gigaword_adadelta_LMController()
+
+    state['prefix']='/data/lisatmp3/firatorh/nmt/wmt15/trainedModels/deepFusion/fused_GHOG_adadelta_40k_reshuf0_tmCont_'
+
+    state['seed'] = 1321
+
+    state['algo'] = 'SGD_adadelta'
+    state['lr'] = 1e-6
+    state['dim'] = 1000
+    state['dim_lm'] = 2000
+    state['lm_readout_dim'] = 2000
+    state['bs'] = 80
+
+    state['include_lm'] = True
+    state['reload_lm'] = True
+    state['reload'] = True
+    state['train_only_readout'] = True
+    state['random_readout'] = False
+
+    state['controller_temp'] = 1.0
+    state['use_lm_control'] = 2
+    state['use_arctic_lm'] = True
+    state['init_ctlr_bias'] = -1.0
+    state['rho'] = 0.0 # this is only used if use_lm_control=False
+
+    state['use_noise'] = True
+    state['dropout'] = 0.5
+    state['modelpath'] = '/data/lisatmp3/firatorh/nmt/wmt15/trainedModels/deepFusion/lstm40k_intersect_ppl78_model.npz'
+
+    state['weight_noise'] = False
+    state['weight_noise_rec'] = False
+    state['weight_noise_amount'] = 0.0
+    state['optimize_probs'] = False
+
+    state['saveFreq'] = 30
+    state['cutoff'] = 5.0
+    state['hookFreq'] = 30
+
+    # Source and target sentence
+    state['source'] = ["/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/processed/binarized_text.reshuf0.fi.h5"]
+    state['target'] = ["/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/processed/binarized_text.reshuf0.en.h5"]
+
+    # bleu validation args
+    state['validation_set'] = '/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/dev/newsdev2015_1.tok.seg.fi'
+    state['validation_set_grndtruth'] ='/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/dev/newsdev2015_1.tok.en'
+    state['validation_set_out']='/data/lisatmp3/firatorh/nmt/wmt15/trainedModels/deepFusion/fused_GHOG_adadelta_40k_reshuf0_tmCont_out.txt'
+
+    state['output_validation_set'] = True
+    state['beam_size'] = 20
+    state['bleu_val_frequency'] = 2000
+    state['validation_burn_in'] = 0
+
+    return state
+
+def prototype_search_state_fi_en_withLM_gigaword_adadelta_vecLMController_reshuf1_noNoise():
+
+    state = prototype_search_state_fi_en_withLM_gigaword_adadelta_LMController()
+
+    state['prefix']='/data/lisatmp3/firatorh/nmt/wmt15/trainedModels/deepFusion/fused_GHOG_adadelta_40k_vecLMcont_reshuf1_noNoise_'
+
+    state['seed'] = 9911
+
+    state['algo'] = 'SGD_adadelta'
+    state['lr'] = 1e-6
+    state['dim'] = 1000
+    state['dim_lm'] = 2000
+    state['lm_readout_dim'] = 2000
+    state['bs'] = 80
+
+    state['include_lm'] = True
+    state['reload_lm'] = True
+    state['reload'] = True
+    state['train_only_readout'] = True
+    state['random_readout'] = False
+
+    state['controller_temp'] = 1.5
+    state['use_lm_control'] = 1
+    state['vector_controller'] = True
+    state['use_arctic_lm'] = True
+    state['init_ctlr_bias'] = -1.0
+    state['rho'] = 0.0 # this is only used if use_lm_control=False
+
+    state['use_noise'] = False
+    state['dropout'] = 1.0
+    state['modelpath'] = '/data/lisatmp3/firatorh/nmt/wmt15/trainedModels/deepFusion/lstm40k_intersect_ppl78_model.npz'
+
+    state['weight_noise'] = False
+    state['weight_noise_rec'] = False
+    state['weight_noise_amount'] = 0.0
+    state['optimize_probs'] = False
+
+    state['saveFreq'] = 45
+    state['cutoff'] = 5.0
+    state['hookFreq'] = 30
+
+    # Source and target sentence
+    state['source'] = ["/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/processed/binarized_text.reshuf1.fi.h5"]
+    state['target'] = ["/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/processed/binarized_text.reshuf1.en.h5"]
+
+    # bleu validation args
+    state['bleu_script'] = '/data/lisatmp3/firatorh/turkishParallelCorpora/iwslt14/scripts/multi-bleu.perl'
+    state['validation_set'] = '/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/dev/newsdev2015_2.tok.seg.fi'
+    state['validation_set_grndtruth'] = '/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/dev/newsdev2015_2.tok.en'
+    state['validation_set_out']= '/data/lisatmp3/firatorh/nmt/wmt15/trainedModels/deepFusion/fused_GHOG_adadelta_40k_reshuf1_noNoise_out.txt'
+    state['output_validation_set'] = True
+    state['beam_size'] = 20
+    state['bleu_val_frequency'] = 100000
+    state['validation_burn_in'] = 0
+
+    return state
+
+def prototype_search_state_fi_en_withLM_gigaword_adadelta_vecLMController_reshuf1_noNoise_TEST():
+
+    state = prototype_search_state_fi_en_withLM_gigaword_adadelta_LMController()
+
+    state['prefix']='/data/lisatmp3/firatorh/nmt/wmt15/trainedModels/deepFusion/fused_GHOG_adadelta_40k_vecLMcont_reshuf1_noNoise_TEST_'
+
+    state['seed'] = 111
+
+    state['algo'] = 'SGD_adadelta'
+    state['lr'] = 1e-6
+    state['dim'] = 1000
+    state['dim_lm'] = 2000
+    state['lm_readout_dim'] = 2000
+    state['bs'] = 80
+
+    state['include_lm'] = True
+    state['reload_lm'] = True
+    state['reload'] = True
+    state['train_only_readout'] = True
+    state['random_readout'] = False
+
+    state['controller_temp'] = 1.0
+    state['use_lm_control'] = 1
+    state['vector_controller'] = True
+    state['use_arctic_lm'] = True
+    state['init_ctlr_bias'] = 0.0
+    state['rho'] = 0.0 # this is only used if use_lm_control=False
+
+    state['use_noise'] = False
+    state['dropout'] = 1.0
+    state['modelpath'] = '/data/lisatmp3/firatorh/nmt/wmt15/trainedModels/deepFusion/lstm40k_intersect_ppl78_model.npz'
+
+    state['weight_noise'] = False
+    state['weight_noise_rec'] = False
+    state['weight_noise_amount'] = 0.0
+    state['optimize_probs'] = False
+
+    state['saveFreq'] = 45
+    state['cutoff'] = 5.0
+    state['hookFreq'] = 30
+
+    # Source and target sentence
+    state['source'] = ["/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/processed/binarized_text.reshuf1.fi.h5"]
+    state['target'] = ["/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/processed/binarized_text.reshuf1.en.h5"]
+
+    # bleu validation args
+    state['bleu_script'] = '/data/lisatmp3/firatorh/turkishParallelCorpora/iwslt14/scripts/multi-bleu.perl'
+    state['validation_set'] = '/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/dev/newsdev2015_2.tok.seg.fi'
+    state['validation_set_grndtruth'] = '/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/dev/newsdev2015_2.tok.en'
+    state['validation_set_out']= '/data/lisatmp3/firatorh/nmt/wmt15/trainedModels/deepFusion/fused_GHOG_adadelta_40k_reshuf1_noNoise_TEST_out.txt'
+    state['output_validation_set'] = True
+    state['beam_size'] = 20
+    state['bleu_val_frequency'] = 2000
+    state['validation_burn_in'] = 2000
+
+    return state
