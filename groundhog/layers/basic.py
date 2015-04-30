@@ -276,7 +276,6 @@ class Layer(Container):
         #other_var = other
 
         new_obj.out = new_obj.out - other_var
-        import ipdb; ipdb.set_trace()
         if hasattr(new_obj, 'grads') and hasattr(other, 'grads'):
             for param, grad_param in zip(other.params, other.grads):
                 pos = new_obj.params.index(param)

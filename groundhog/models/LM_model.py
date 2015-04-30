@@ -42,6 +42,7 @@ class LM_Model(Model):
                   exclude_params_for_norm=None,
                   exclude_params=None,
                   not_save_params=[],
+                  additional_ngrad_monitors=None,
                   rng = None):
         """
         Constructs a model, that respects the interface required by the
@@ -138,6 +139,7 @@ class LM_Model(Model):
 
         _params = [p for p in self.params if p not in self.exclude_params]
         _param_grads = [g for p, g in zip(self.params,self.param_grads) if p not in self.exclude_params]
+
         grad_norm = TT.sqrt(sum(TT.sum(TT.sqr(x))
             for x,p in zip(_param_grads, _params) if p not in
                 self.exclude_params_for_norm))
@@ -147,6 +149,14 @@ class LM_Model(Model):
                 ('log2_p_word', self.train_cost / num_words / scale),
                 ('log2_p_expl', self.cost_layer.cost_per_sample.mean() / scale)]
         self.properties += new_properties
+
+        if additional_ngrad_monitors:
+            idx = [ind for ind, var in enumerate(_params)
+                   if var.name in additional_ngrad_monitors]
+            gnorms = [TT.sqrt(TT.sum(TT.sum(TT.sqr(_param_grads[ind]))))
+                      for ind in idx]
+            names = ['gNorm[' + x + ']' for x in additional_ngrad_monitors]
+            self.properties += zip(names, gnorms)
 
         if len(self.noise_params) >0 and weight_noise_amount:
             if self.need_inputs_for_generating_noise:

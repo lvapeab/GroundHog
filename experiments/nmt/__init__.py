@@ -83,5 +83,6 @@ from state import prototype_state, \
                   prototype_search_state_fi_en_withLM_gigaword_adadelta_TMController_reshuf0,\
                   prototype_search_state_fi_en_withLM_gigaword_adadelta_LMController_reshuf1,\
                   prototype_search_state_fi_en_withLM_gigaword_adadelta_vecLMController_reshuf1_noNoise,\
-                  prototype_search_state_fi_en_withLM_gigaword_adadelta_vecLMController_reshuf1_noNoise_TEST
+                  prototype_search_state_fi_en_withLM_gigaword_adadelta_vecLMController_reshuf1_noNoise_TEST,\
+                  prototype_search_state_fi_en_withLM_gigaword_adadelta_vecLMController_reshuf1_noNoise_TEST2
 

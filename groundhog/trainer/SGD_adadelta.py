@@ -92,6 +92,7 @@ class SGD(object):
         self.prop_exprs = [x[1] for x in model.properties]
         self.prop_names = [x[0] for x in model.properties]
         self.update_rules = [x[1] for x in model.updates]
+
         if model.lm_alpha:
             last_two = [model.lm_alpha.out, model.train_cost]
         else:
@@ -138,8 +139,8 @@ class SGD(object):
         st = time.time()
         self.train_fn = theano.function(
             [], outs, name='train_function',
-            updates = updates,
-            givens = zip(model.inputs, loc_data))
+            updates=updates,
+            givens=zip(model.inputs, loc_data))
         logger.debug('took {}'.format(time.time() - st))
 
         self.lr = numpy.float32(1.)
@@ -207,6 +208,7 @@ class SGD(object):
                             if self.model.lm_alpha else 0.0
         self.old_cost = cost
         whole_time = time.time() - self.step_timer
+
         if self.step % self.state['trainFreq'] == 0:
             msg = '.. iter %4d cost %.3f'
             vals = [self.step, cost]

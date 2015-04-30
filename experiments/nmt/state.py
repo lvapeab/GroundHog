@@ -3756,6 +3756,7 @@ def prototype_search_state_fi_en_withLM_gigaword_adadelta_vecLMController_reshuf
     state['use_arctic_lm'] = True
     state['init_ctlr_bias'] = 0.0
     state['rho'] = 0.0 # this is only used if use_lm_control=False
+    state['additional_ngrad_monitors'] = ['W_0_lm_controller', 'W_0_dec_lm_embed_0']
 
     state['use_noise'] = False
     state['dropout'] = 1.0
@@ -3776,12 +3777,19 @@ def prototype_search_state_fi_en_withLM_gigaword_adadelta_vecLMController_reshuf
 
     # bleu validation args
     state['bleu_script'] = '/data/lisatmp3/firatorh/turkishParallelCorpora/iwslt14/scripts/multi-bleu.perl'
-    state['validation_set'] = '/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/dev/newsdev2015_2.tok.seg.fi'
-    state['validation_set_grndtruth'] = '/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/dev/newsdev2015_2.tok.en'
+    state['validation_set'] = '/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/dev/newsdev2015.tok.seg.fi'
+    state['validation_set_grndtruth'] = '/data/lisatmp3/firatorh/nmt/wmt15/data/fi-en/dev/newsdev2015.tok.en'
     state['validation_set_out']= '/data/lisatmp3/firatorh/nmt/wmt15/trainedModels/deepFusion/fused_GHOG_adadelta_40k_reshuf1_noNoise_TEST_out.txt'
     state['output_validation_set'] = True
     state['beam_size'] = 20
     state['bleu_val_frequency'] = 2000
     state['validation_burn_in'] = 2000
 
+    return state
+
+def prototype_search_state_fi_en_withLM_gigaword_adadelta_vecLMController_reshuf1_noNoise_TEST2():
+
+    state = prototype_search_state_fi_en_withLM_gigaword_adadelta_vecLMController_reshuf1_noNoise_TEST()
+    state['additional_ngrad_monitors'] = ['W_0_lm_controller', 'W_0_dec_lm_embed_0']
+    state['prefix']='/data/lisatmp3/firatorh/nmt/wmt15/trainedModels/deepFusion/fused_GHOG_adadelta_40k_vecLMcont_reshuf1_noNoise_TEST2_'
     return state

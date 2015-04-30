@@ -1077,6 +1077,19 @@ class Decoder(EncoderDecoderBase):
     def _create_lm(self):
         logger.debug("Creating External language model")
 
+        if self.num_levels > 1:
+            raise NotImplementedError('Fix this part!')
+        level = 0
+        self.lm_embedder = MultiLayer(
+            self.rng,
+            n_in=self.state['lm_readout_dim'],
+            n_hids=self.state['dim'],
+            activation=['lambda x:x'],
+            learn_bias=False,
+            name='{}_lm_embed_{}'.format(self.prefix, level),
+            **self.default_kwargs)
+        self.readout_params += self.lm_embedder.params
+
         if not self.state['use_arctic_lm']:
             self.LM_builder = LM_builder(self.state['lm_readout_dim'], self.rng, skip_init=False)
             # build output refers to the softmax over words
@@ -1240,17 +1253,6 @@ class Decoder(EncoderDecoderBase):
                 name='{}_prev_readout_{}'.format(self.prefix, level),
                 **self.default_kwargs)
             self.readout_params += self.prev_word_readout.params
-
-        if self.state['include_lm']:
-            self.lm_embedder = MultiLayer(
-                self.rng,
-                n_in=self.state['lm_readout_dim'],
-                n_hids=self.state['dim'],
-                activation=['lambda x:x'],
-                learn_bias=False,
-                name='{}_lm_embed_{}'.format(self.prefix, level),
-                **self.default_kwargs)
-            self.readout_params += self.lm_embedder.params
 
         if self.state['deep_out']:
             act_layer = UnaryOp(activation=eval(self.state['unary_activ']))
@@ -1473,7 +1475,7 @@ class Decoder(EncoderDecoderBase):
         # Shape if mode != evaluation
         #   (n_samples, dim_r)
         # ... where dim_r depends on 'deep_out' option.
-        readout = self.repr_readout(contexts[0])
+        readout_tm = self.repr_readout(contexts[0])
         for level in range(self.num_levels):
             if mode != Decoder.EVALUATION:
                 read_from = init_states[level]
@@ -1488,7 +1490,7 @@ class Decoder(EncoderDecoderBase):
                 read_from.out = read_from_var
             else:
                 read_from = read_from_var
-            readout += self.hidden_readouts[level](read_from)
+            readout_tm += self.hidden_readouts[level](read_from)
 
         if self.state['bigram']:
             if mode != Decoder.EVALUATION:
@@ -1496,10 +1498,10 @@ class Decoder(EncoderDecoderBase):
                     if self.state['check_first_word']
                     else TT.ones((y.shape[0]), dtype="float32"))
                 # padright is necessary as we want to multiply each row with a certain scalar
-                readout += TT.shape_padright(check_first_word) * self.prev_word_readout(approx_embeddings).out
+                readout_tm += TT.shape_padright(check_first_word) * self.prev_word_readout(approx_embeddings).out
             else:
                 if y.ndim == 1:
-                    readout += Shift()(self.prev_word_readout(approx_embeddings).reshape(
+                    readout_tm += Shift()(self.prev_word_readout(approx_embeddings).reshape(
                         (y.shape[0], 1, self.state['dim'])))
                 else:
                     # This place needs explanation. When prev_word_readout is applied to
@@ -1507,9 +1509,9 @@ class Decoder(EncoderDecoderBase):
                     # (n_batches * sequence_length, repr_dimensionality). We first
                     # transform it into 3D tensor to shift forward in time. Then
                     # reshape it back.
-                    readout += Shift()(self.prev_word_readout(approx_embeddings).reshape(
+                    readout_tm += Shift()(self.prev_word_readout(approx_embeddings).reshape(
                         (y.shape[0], y.shape[1], self.state['dim']))).reshape(
-                                readout.out.shape)
+                                readout_tm.out.shape)
 
         # add language model, for evaluation lm_hidden_state is shifted forward in time
         # for one step and then multiplied by alpha. For sampling and search,
@@ -1548,8 +1550,9 @@ class Decoder(EncoderDecoderBase):
                     readout_lm = (lm_alpha.reshape((readout_lm.shape[0],
                                                     1 if not
                                                     self.state['vector_controller']
-                                                    else self.state['dim'])) * readout_lm).reshape(readout.out.shape)
-                    readout += readout_lm
+                                                    else self.state['dim'])) *
+                                  readout_lm).reshape(readout_tm.out.shape)
+                    readout = readout_tm + readout_lm
 
                 else:
                     lm_alpha = self.lm_controller(Shift()(lm_hidden_state))
@@ -1560,7 +1563,7 @@ class Decoder(EncoderDecoderBase):
                                                      else self.state['dim']))
                         readout_lm = self.lm_embedder(lm_hidden_state).reshape(
                                              (y.shape[0], 1, self.state['dim']))
-                        readout_lm = Shift()(readout_lm).reshape(readout.out.shape)
+                        readout_lm = Shift()(readout_lm).reshape(readout_tm.out.shape)
                     else:
                         lm_alpha = lm_alpha.reshape((y.shape[0], y.shape[1],
                                                      1 if not
@@ -1569,7 +1572,8 @@ class Decoder(EncoderDecoderBase):
                         readout_lm = self.lm_embedder(lm_hidden_state).reshape((y.shape[0], y.shape[1], self.state['dim']))
                         readout_lm = Shift()(readout_lm)
 
-                    readout += (lm_alpha * readout_lm).reshape(readout.out.shape)
+                    scaled_readout_lm = (lm_alpha * readout_lm).reshape(readout_tm.out.shape)
+                    readout = readout_tm + scaled_readout_lm
 
             # Condition on tm only based controller
             elif self.state['use_lm_control'] == 2:
@@ -1577,16 +1581,17 @@ class Decoder(EncoderDecoderBase):
                     lm_hidden_state = TT.switch(check_first_word[:,None],
                                                 lm_hidden_state, 0. * lm_hidden_state)
 
-                    lm_alpha = self.lm_controller(readout)
+                    lm_alpha = self.lm_controller(readout_tm)
                     readout_lm = TT.shape_padright(check_first_word) * self.lm_embedder(lm_hidden_state).out
                     readout_lm = (lm_alpha.reshape((readout_lm.shape[0],
                                                     1 if not
                                                     self.state['vector_controller']
-                                                    else self.state['dim'])) * readout_lm).reshape(readout.out.shape)
-                    readout += readout_lm
+                                                    else self.state['dim'])) *
+                                                    readout_lm).reshape(readout_tm.out.shape)
+                    readout = readout_rm + readout_lm
 
                 else:
-                    lm_alpha = self.lm_controller(readout)
+                    lm_alpha = self.lm_controller(readout_tm)
                     if y.ndim == 1:
                         lm_alpha = lm_alpha.reshape((y.shape[0], 1,
                                                     1 if not
@@ -1594,7 +1599,7 @@ class Decoder(EncoderDecoderBase):
                                                     else self.state['dim']))
                         readout_lm = self.lm_embedder(lm_hidden_state).reshape(
                                              (y.shape[0], 1, self.state['dim']))
-                        readout_lm = Shift()(readout_lm).reshape(readout.out.shape)
+                        readout_lm = Shift()(readout_lm).reshape(readout_tm.out.shape)
                     else:
                         lm_alpha = lm_alpha.reshape((y.shape[0], y.shape[1],
                                                     1 if not
@@ -1603,7 +1608,7 @@ class Decoder(EncoderDecoderBase):
                         readout_lm = self.lm_embedder(lm_hidden_state).reshape((y.shape[0], y.shape[1], self.state['dim']))
                         readout_lm = Shift()(readout_lm)
 
-                    readout += (lm_alpha * readout_lm).reshape(readout.out.shape)
+                    readout = readout_tm + (lm_alpha * readout_lm).reshape(readout_tm.out.shape)
 
             # Conditiona on both tm and lm based controller
             elif self.state['use_lm_control'] == 3:
@@ -1611,16 +1616,17 @@ class Decoder(EncoderDecoderBase):
                     lm_hidden_state = TT.switch(check_first_word[:,None],
                                                 lm_hidden_state, 0. * lm_hidden_state)
 
-                    lm_alpha = self.lm_controller(readout, lm_hidden_state)
+                    lm_alpha = self.lm_controller(readout_tm, lm_hidden_state)
                     readout_lm = TT.shape_padright(check_first_word) * self.lm_embedder(lm_hidden_state).out
                     readout_lm = (lm_alpha.reshape((readout_lm.shape[0],
                                                     1 if not
                                                     self.state['vector_controller']
-                                                    else self.state['dim'])) * readout_lm).reshape(readout.out.shape)
-                    readout += readout_lm
+                                                    else self.state['dim'])) *
+                                                    readout_lm).reshape(readout_tm.out.shape)
+                    readout = readout_tm + readout_lm
 
                 else:
-                    lm_alpha = self.lm_controller(readout, Shift()(lm_hidden_state))
+                    lm_alpha = self.lm_controller(readout_tm, Shift()(lm_hidden_state))
                     if y.ndim == 1:
                         lm_alpha = lm_alpha.reshape((y.shape[0], 1,
                                                     1 if not
@@ -1628,7 +1634,7 @@ class Decoder(EncoderDecoderBase):
                                                     else self.state['dim']))
                         readout_lm = self.lm_embedder(lm_hidden_state).reshape(
                                              (y.shape[0], 1, self.state['dim']))
-                        readout_lm = Shift()(readout_lm).reshape(readout.out.shape)
+                        readout_lm = Shift()(readout_lm).reshape(readout_tm.out.shape)
                     else:
                         lm_alpha = lm_alpha.reshape((y.shape[0], y.shape[1],
                                                     1 if not
@@ -1637,7 +1643,7 @@ class Decoder(EncoderDecoderBase):
                         readout_lm = self.lm_embedder(lm_hidden_state).reshape((y.shape[0], y.shape[1], self.state['dim']))
                         readout_lm = Shift()(readout_lm)
 
-                    readout += (lm_alpha * readout_lm).reshape(readout.out.shape)
+                    readout = readout_tm + (lm_alpha * readout_lm).reshape(readout.out.shape)
 
             # No lm controller, take convex combination by rho
             else:
@@ -1646,17 +1652,22 @@ class Decoder(EncoderDecoderBase):
                                                 lm_hidden_state, 0. * lm_hidden_state)
 
                     readout_lm = TT.shape_padright(check_first_word) * self.lm_embedder(lm_hidden_state).out
-                    readout = readout * (self.state['rho']) + readout_lm * (1 - self.state['rho'])
+                    readout_tm = readout_tm * (self.state['rho']) + readout_lm * (1 - self.state['rho'])
                 else:
                     if y.ndim == 1:
                         readout_lm = self.lm_embedder(lm_hidden_state).reshape(
                                              (y.shape[0], 1, self.state['dim']))
-                        readout_lm = Shift()(readout_lm).reshape(readout.out.shape)
+                        readout_lm = Shift()(readout_lm).reshape(readout_tm.out.shape)
                     else:
                         readout_lm = self.lm_embedder(lm_hidden_state).reshape((y.shape[0], y.shape[1], self.state['dim']))
-                        readout_lm = Shift()(readout_lm).reshape(readout.out.shape)
+                        readout_lm = Shift()(readout_lm).reshape(readout_tm.out.shape)
 
-                    readout = readout * self.state['rho'] + readout_lm * (1 - self.state['rho'])
+                    readout = readout_tm * self.state['rho'] + readout_lm * (1 - self.state['rho'])
+            readout.params += readout_lm.params
+            readout.params_grad_scale += readout_lm.params_grad_scale
+        else:
+            readout = readout_tm
+
 
         for fun in self.output_nonlinearities:
             if isinstance(fun, DropOp) and mode != Decoder.EVALUATION:
@@ -1849,6 +1860,8 @@ class RNNEncoderDecoder(object):
             self.state['use_hier_enc'] = False
         if 'vector_controller' not in self.state:
             self.state['vector_controller'] = False
+        if 'additional_ngrad_monitors' not in self.state:
+            self.state['additional_ngrad_monitors'] = None
 
     def build(self, use_noise=True):
         logger.debug("Create input variables")
@@ -1879,7 +1892,6 @@ class RNNEncoderDecoder(object):
                     self.x, self.x_mask,
                     use_noise=self.state['use_noise'],
                     return_hidden_layers=True)
-
 
         if self.state['encoder_stack'] > 0 and not self.state['use_hier_enc']:
             logger.debug("Create backward encoder")
@@ -2051,7 +2063,8 @@ class RNNEncoderDecoder(object):
                                  indx_word=self.state['indx_word_target'],
                                  indx_word_src=self.state['indx_word'],
                                  rng=self.rng,
-                                 exclude_params=excluded_params)
+                                 exclude_params=excluded_params,
+                                 additional_ngrad_monitors=self.state['additional_ngrad_monitors'])
         self.lm_model.lm_alpha = self.lm_alpha
         self.lm_model.name2pos = name2pos(self.lm_model.params)
         self.lm_model.load_dict(self.state)
