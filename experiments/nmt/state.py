@@ -3783,13 +3783,15 @@ def prototype_search_state_fi_en_withLM_gigaword_adadelta_vecLMController_reshuf
     state['output_validation_set'] = True
     state['beam_size'] = 20
     state['bleu_val_frequency'] = 2000
-    state['validation_burn_in'] = 2000
+    state['validation_burn_in'] = 0
 
     return state
 
 def prototype_search_state_fi_en_withLM_gigaword_adadelta_vecLMController_reshuf1_noNoise_TEST2():
 
     state = prototype_search_state_fi_en_withLM_gigaword_adadelta_vecLMController_reshuf1_noNoise_TEST()
+    state['use_cross_dict'] = True
     state['additional_ngrad_monitors'] = ['W_0_lm_controller', 'W_0_dec_lm_embed_0']
     state['prefix']='/data/lisatmp3/firatorh/nmt/wmt15/trainedModels/deepFusion/fused_GHOG_adadelta_40k_vecLMcont_reshuf1_noNoise_TEST2_'
     return state
+

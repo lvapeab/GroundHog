@@ -37,13 +37,10 @@ class Timer(object):
 class BeamSearch(object):
 
     def __init__(self, enc_dec, aux_lm=None, eta=None, score=False,
-            weight_lm_only=False):
+                 weight_lm_only=False):
         self.enc_dec = enc_dec
-        state = self.enc_dec.state
-        self.eos_id = state['null_sym_target']
-        self.unk_id = state['unk_sym_target']
         self.aux_lm = aux_lm
-        self.eta    = eta
+        self.eta = eta
         self.score = score
         self.weight_lm_only = weight_lm_only
 
@@ -55,15 +52,14 @@ class BeamSearch(object):
 
         # compile sampling and prob functions if necessary
         if self.aux_lm:
-
-            trng = RandomStreams(1234)
             self.aux_lm_f_next = arcLM.build_sampler(self.aux_lm['model_tparams'],
-                                              self.aux_lm['model_options'],
-                                              RandomStreams(1234))
+                                                     self.aux_lm['model_options'],
+                                                     RandomStreams(1234))
 
-    def search(self, seq, n_samples, ignore_unk=False, minlen=1):
+    def search(self, seq, n_samples, ignore_unk=False,
+               minlen=1, eos_id=0, unk_id=1, cross_dict=None):
         c = self.comp_repr(seq)[0]
-        states = map(lambda x : x[None, :], self.comp_init_states(c))
+        states = map(lambda x: x[None, :], self.comp_init_states(c))
         dim = states[0].shape[1]
 
         # Set initial states of  the language
@@ -72,7 +68,7 @@ class BeamSearch(object):
         states_mem_lm = None
         if self.enc_dec.state['include_lm']:
             dim_lm = self.enc_dec.decoder.state['lm_readout_dim']
-            states_lm = numpy.zeros((1,dim_lm),dtype="float32")
+            states_lm = numpy.zeros((1, dim_lm), dtype="float32")
             if self.enc_dec.state['use_arctic_lm']:
                 states_mem_lm = numpy.zeros((1, dim_lm), dtype="float32")
 
@@ -82,9 +78,9 @@ class BeamSearch(object):
         memory_aux_lm = None
         if self.aux_lm:
             dim_aux_lm = self.aux_lm['model_options']['dim']
-            states_aux_lm = numpy.zeros((1,dim_aux_lm),dtype="float32")
+            states_aux_lm = numpy.zeros((1, dim_aux_lm), dtype="float32")
             if self.aux_lm['model_options']['rec_layer'] == 'lstm':
-                memory_aux_lm = numpy.zeros((1,dim_aux_lm)).astype('float32')
+                memory_aux_lm = numpy.zeros((1, dim_aux_lm)).astype('float32')
 
         if self.score:
             score_lm = [[]]
@@ -112,6 +108,14 @@ class BeamSearch(object):
                 if self.enc_dec.state['use_arctic_lm']:
                     new_states_mem_lm = numpy.zeros((n_samples, dim_lm), dtype="float32")
 
+
+            # Compute probabilities of the next words for
+            # all the elements of the beam.
+            beam_size = len(trans)
+            last_words = (numpy.array(map(lambda t: t[-1], trans))
+                    if k > 0
+                    else numpy.zeros(beam_size, dtype="int64"))
+
             # reset states of the auxiliary language model
             new_states_aux_lm = None
             new_memory_aux_lm = None
@@ -120,22 +124,23 @@ class BeamSearch(object):
                 if self.aux_lm['model_options']['rec_layer'] == 'lstm':
                     new_memory_aux_lm = numpy.zeros((n_samples, dim_aux_lm), dtype="float32")
 
-            # Compute probabilities of the next words for
-            # all the elements of the beam.
-            beam_size = len(trans)
-            last_words = (numpy.array(map(lambda t : t[-1], trans))
-                    if k > 0
-                    else numpy.zeros(beam_size, dtype="int64"))
+                # If TM and LM dictionaries are not matching use a cross
+                # dictionary for the correct mapping
+                last_words_lm = last_words
+                if cross_dict and k > 0:
+                    last_words_lm = numpy.asarray([cross_dict[el]
+                                                   for el in last_words])
 
-            log_probs_tm = numpy.log(self.comp_next_probs(c, k, last_words,
+            log_probs_tm = numpy.log(self.comp_next_probs(
+                                     c, k, last_words, cross_dict,
                                      states_lm, states_mem_lm, *states)[0])
 
             # Adjust log probs according to search restrictions
             if ignore_unk:
-                log_probs_tm[:,self.unk_id] = -numpy.inf
+                log_probs_tm[:, unk_id] = -numpy.inf
             # TODO: report me in the paper!!!
             if k < minlen:
-                log_probs_tm[:,self.eos_id] = -numpy.inf
+                log_probs_tm[:, eos_id] = -numpy.inf
 
             # Find the best options by calling argpartition of flatten array
             next_costs_tm = numpy.array(costs)[:, None] - log_probs_tm
@@ -147,25 +152,28 @@ class BeamSearch(object):
             # get log probability given last words and previous hidden states
             # and then fuse it with TM log probability by their geometric mean
             if self.aux_lm:
-                probs_lm, _, _, _ = self.aux_lm_f_next(last_words,
+                probs_lm, _, _, _ = self.aux_lm_f_next(last_words_lm,
                     states_aux_lm, memory_aux_lm)
 
                 # append last column for eos symbol - which is excluded in arctic
-                probs_lm = numpy.append(probs_lm, probs_lm[:,-1][:,None], axis=1)
+                #probs_lm = numpy.append(probs_lm, probs_lm[:,-1][:,None], axis=1)
 
                 # set prev last column to zero
-                probs_lm[:,-2] = 0.
+                #probs_lm[:,-2] = 0.
 
                 # set unk probability to zero and re-normalize whole distribution
                 # and convert it back to log-probability. Then set the eos probability
                 # of language model to eos probability of translation model
-                #probs_lm[:,self.unk_id] = 0.
-                #probs_lm = probs_lm / probs_lm.sum(axis=1)[:,None]
+                unk_id_lm = self.aux_lm['model_options']['unk_idx']
+                eos_id_lm = self.aux_lm['model_options']['n_words'] - 1
+                probs_lm[:, unk_id_lm] = 1e-16
+                probs_lm = probs_lm / probs_lm.sum(axis=1)[:, None]
+
                 log_probs_lm = numpy.log(probs_lm)
+
                 #log_probs_lm[numpy.arange(last_words.shape[0]),self.enc_dec.state['null_sym_target']] = \
                 #            log_probs_tm[numpy.arange(last_words.shape[0]),self.enc_dec.state['null_sym_target']]
 
-                # minus here
                 flat_next_costs_lm = - log_probs_lm.flatten()
 
             # Decypher flatten indices
@@ -174,55 +182,85 @@ class BeamSearch(object):
             word_indices = best_costs_indices_tm % voc_size
 
             # get the geometric mean here
-            if self.weight_lm_only:
-                costs = [flat_next_costs_tm[ww] + (1-self.eta) * flat_next_costs_lm[ww]
-                            if (ww != self.eos_id or ww != self.unk_id)
-                            else flat_next_costs_tm[ww]
-                                for ww in best_costs_indices_tm]
+            if self.aux_lm:
+                best_costs_indices_lm = numpy.zeros_like(best_costs_indices_tm)
+                if cross_dict:
+                    voc_size_lm = self.aux_lm['model_options']['n_words']
+                    for cid, (tid, wid) in enumerate(zip(trans_indices, word_indices)):
+                        wid_lm = cross_dict[wid]
+                        best_costs_indices_lm[cid] = wid_lm + (tid * voc_size_lm)
+
+                if self.weight_lm_only:
+                    costs = [flat_next_costs_tm[ww] +
+                             (1-self.eta) * flat_next_costs_lm[zz]
+                             if (zz != eos_id_lm and zz != unk_id_lm)
+                             else flat_next_costs_tm[ww]
+                             for ww, zz in zip(best_costs_indices_tm,
+                                               best_costs_indices_lm)]
+                else:
+                    costs = [(self.eta) * flat_next_costs_tm[ww] +
+                             (1-self.eta) * flat_next_costs_lm[zz]
+                             if (zz != eos_id_lm and zz != unk_id_lm)
+                             else flat_next_costs_tm[ww]
+                             for ww, zz in zip(best_costs_indices_tm,
+                                               best_costs_indices_lm)]
             else:
-                costs = [(self.eta)   * flat_next_costs_tm[ww] +
-                        (1-self.eta) * flat_next_costs_lm[ww]
-                        if (ww != self.eos_id or ww != self.unk_id)
-                        else flat_next_costs_tm[ww]
-                        for ww in best_costs_indices_tm]
+                    costs = flat_next_costs_tm[best_costs_indices_tm]
 
             if self.score:
-                new_score_lm = [[]] * n_samples
                 new_score_tm = [[]] * n_samples
+                if self.aux_lm:
+                    new_score_lm = [[]] * n_samples
 
             # Form a beam for the next iteration
             new_trans = [[]] * n_samples
             new_costs = numpy.zeros(n_samples)
             new_states = [numpy.zeros((n_samples, dim), dtype="float32") for level
-                    in range(num_levels)]
+                          in range(num_levels)]
             inputs = numpy.zeros(n_samples, dtype="int64")
+
             for i, (orig_idx, next_word, next_cost) in enumerate(
                     zip(trans_indices, word_indices, costs)):
+
                 new_trans[i] = trans[orig_idx] + [next_word]
                 new_costs[i] = next_cost
+
                 for level in range(num_levels):
                     new_states[level][i] = states[level][orig_idx]
+
                 if self.enc_dec.state['include_lm']:
                     new_states_lm[i] = states_lm[orig_idx]
                     if self.enc_dec.state['use_arctic_lm']:
                         new_states_mem_lm[i] = states_mem_lm[orig_idx]
+
                 if self.aux_lm:
                     new_states_aux_lm[i] = states_aux_lm[orig_idx]
                     new_memory_aux_lm[i] = memory_aux_lm[orig_idx]
+
                 if self.score:
-                    if self.aux_lm:
-                        new_score_lm[i] = score_lm[orig_idx] + [log_probs_lm[orig_idx][next_word]]
                     new_score_tm[i] = score_tm[orig_idx] + [log_probs_tm[orig_idx][next_word]]
+                    if self.aux_lm:
+                        if cross_dict:
+                            next_word_lm = cross_dict[next_word]
+                            new_score_lm[i] = score_lm[orig_idx] + \
+                                [log_probs_lm[orig_idx][next_word_lm]]
+                        else:
+                            new_score_lm[i] = score_lm[orig_idx] + \
+                                [log_probs_lm[orig_idx][next_word]]
+
                 inputs[i] = next_word
+
             if self.enc_dec.state['include_lm']:
                 if self.enc_dec.state['use_arctic_lm']:
-                    new_states, new_states_lm, new_states_mem_lm = self.comp_next_states(c, k,
-                            inputs, new_states_lm, new_states_mem_lm, *new_states)
+                    new_states, new_states_lm, new_states_mem_lm = self.comp_next_states(
+                            c, k, inputs, cross_dict,
+                            new_states_lm, new_states_mem_lm, *new_states)
                 else:
-                    new_states, new_states_lm = self.comp_next_states(c, k,
-                            inputs, new_states_lm, new_states_mem_lm, *new_states)
+                    new_states, new_states_lm = self.comp_next_states(
+                            c, k, inputs, cross_dict,
+                            new_states_lm, new_states_mem_lm, *new_states)
             else:
-                new_states = self.comp_next_states(c, k, inputs,
+                new_states = self.comp_next_states(c, k, inputs, cross_dict,
                                                    new_states_lm,
                                                    new_states_mem_lm,
                                                    *new_states)
@@ -230,8 +268,14 @@ class BeamSearch(object):
             # get previous hidden states of auxiliary language model
             if self.aux_lm:
                 inputs_aux_lm = inputs
-                inputs_aux_lm[numpy.where(inputs==self.enc_dec.state['null_sym_target'])]=\
-                        self.enc_dec.state['null_sym_target']-1
+                if cross_dict:
+                    inputs_aux_lm = numpy.asarray([cross_dict[xx]
+                                                   for xx in inputs_aux_lm])
+
+                # Currently this is being done in cross_dict
+                #inputs_aux_lm[numpy.where(inputs==self.enc_dec.state['null_sym_target'])]=\
+                #        self.enc_dec.state['null_sym_target']-1
+
                 _, _,\
                 new_states_aux_lm,\
                 new_memory_aux_lm = self.aux_lm_f_next(inputs_aux_lm,
@@ -268,12 +312,12 @@ class BeamSearch(object):
                         fin_score_tm.append(new_score_tm[i])
 
             if self.enc_dec.state['include_lm']:
-                states = map(lambda x : x[indices], [new_states])
+                states = map(lambda x: x[indices], [new_states])
                 states_lm = new_states_lm[indices]
                 if self.enc_dec.state['use_arctic_lm']:
                     states_mem_lm = new_states_mem_lm[indices]
             else:
-                states = map(lambda x : x[indices], new_states)
+                states = map(lambda x: x[indices], new_states)
 
             if self.aux_lm:
                 states_aux_lm = new_states_aux_lm[indices]
@@ -293,11 +337,16 @@ class BeamSearch(object):
         TM_score = numpy.zeros(len(fin_costs))
         if self.score:
             if self.aux_lm:
-                LM_score = numpy.array([numpy.sum(f,axis=0) for f in fin_score_lm])[numpy.argsort(fin_costs)]
-            TM_score = numpy.array([numpy.sum(f,axis=0) for f in fin_score_tm])[numpy.argsort(fin_costs)]
+                LM_score = numpy.array(
+                    [numpy.sum(f, axis=0)
+                     for f in fin_score_lm])[numpy.argsort(fin_costs)]
+            TM_score = numpy.array(
+                [numpy.sum(f, axis=0)
+                 for f in fin_score_tm])[numpy.argsort(fin_costs)]
         fin_trans = numpy.array(fin_trans)[numpy.argsort(fin_costs)]
         fin_costs = numpy.array(sorted(fin_costs))
         return fin_trans, fin_costs, LM_score, TM_score
+
 
 def indices_to_words(i2w, seq):
     sen = []
@@ -307,14 +356,18 @@ def indices_to_words(i2w, seq):
         sen.append(i2w[seq[k]])
     return sen
 
+
 def sample(lm_model, seq, n_samples,
-        sampler=None, beam_search=None,
-        ignore_unk=False, normalize=False,
-        alpha=1, verbose=False):
+           sampler=None, beam_search=None,
+           ignore_unk=False, normalize=False,
+           alpha=1, verbose=False, unk_id=1, eos_id=0,
+           cross_dict=None):
     if beam_search:
         sentences = []
-        trans, costs, score_lm, score_tm = beam_search.search(seq, n_samples,
-                ignore_unk=ignore_unk, minlen=len(seq) / 2)
+        trans, costs, score_lm, score_tm = beam_search.search(
+            seq, n_samples, cross_dict=cross_dict,
+            ignore_unk=ignore_unk, minlen=len(seq) / 2,
+            unk_id=unk_id, eos_id=eos_id)
         if normalize:
             counts = [len(s) for s in trans]
             costs = [co / cn for co, cn in zip(costs, counts)]
@@ -323,8 +376,8 @@ def sample(lm_model, seq, n_samples,
             sentences.append(" ".join(sen))
         for i in range(len(costs)):
             if verbose:
-                print "{}: {} - lmScore[{}] tmScore[{}]".format(costs[i],
-                        sentences[i],score_lm[i],score_tm[i])
+                print "{}: {} - lmScore[{}] tmScore[{}]".format(
+                    costs[i], sentences[i], score_lm[i], score_tm[i])
         return sentences, costs, trans
     elif sampler:
         sentences = []
@@ -400,6 +453,8 @@ def parse_args():
     parser.add_argument("--weight-lm-only",
             action="store_true", default=False,
             help="use eta * prob_tm or not")
+    parser.add_argument("--cross-dict", action="store_true", default=False,
+                        help="Build cross dictionary from TM indices to LM indices")
     return parser.parse_args()
 
 def main():
@@ -457,6 +512,16 @@ def main():
 
         n_samples = args.beam_size
 
+        # Build cross dictionary
+        cross_dict = None
+        if aux_lm and args.cross_dict:
+            cross_dict = {}
+            for idx, word in lm_model.word_indxs.iteritems():
+                cross_dict[idx] = aux_lm['dict'].get(
+                        word, aux_lm['model_options']['unk_idx'])
+            cross_dict[eos_id] = aux_lm['model_options']['n_words'] - 1
+            cross_dict[unk_id] = aux_lm['model_options']['unk_idx']
+
         total_cost = 0.0
         logging.debug("Beam size: {}".format(n_samples))
         for i, line in enumerate(fsrc):
@@ -468,9 +533,14 @@ def main():
             seq, parsed_in = parse_input(state, indx_word, seqin, idx2word=idict_src)
             if args.verbose:
                 print "Parsed Input:", parsed_in
+
             trans, costs, _ = sample(lm_model, seq, n_samples, sampler=sampler,
-                    beam_search=beam_search, ignore_unk=args.ignore_unk,
-                    normalize=args.normalize, verbose=args.verbose)
+                                     beam_search=beam_search, ignore_unk=args.ignore_unk,
+                                     normalize=args.normalize,
+                                     cross_dict=cross_dict,
+                                     eos_id=eos_id,
+                                     unk_id=unk_id,
+                                     verbose=args.verbose)
             nbest_idx = numpy.argsort(costs)[:args.n_best]
             for j, best in enumerate(nbest_idx):
                 if state['target_encoding'] == 'utf8':

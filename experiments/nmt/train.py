@@ -49,14 +49,17 @@ class RandomSamplePrinter(object):
                     break
 
                 x, y = xs[:, seq_idx], ys[:, seq_idx]
-                x_words = cut_eol(map(lambda w_idx : self.model.word_indxs_src[w_idx], x))
-                y_words = cut_eol(map(lambda w_idx : self.model.word_indxs[w_idx], y))
+                x_words = cut_eol(map(lambda w_idx: self.model.word_indxs_src[w_idx], x))
+                y_words = cut_eol(map(lambda w_idx: self.model.word_indxs[w_idx], y))
                 if len(x_words) == 0:
                     continue
 
                 self.__print_samples("Input", x_words, self.state['source_encoding'])
                 self.__print_samples("Target", y_words, self.state['target_encoding'])
-                self.model.get_samples(self.state['seqlen'] + 1, self.state['n_samples'], x[:len(x_words)])
+                self.model.get_samples(
+                    self.state['seqlen'] + 1,
+                    self.state['n_samples'], x[:len(x_words)],
+                    self.model.cross_dict)
 
                 sample_idx += 1
 
@@ -68,6 +71,7 @@ class RandomSamplePrinter(object):
         else:
             print "Unknown encoding {}".format(encoding)
 
+
 class BleuValidator(object):
     """
     Object that evaluates the bleu score on the validation set.
@@ -75,9 +79,9 @@ class BleuValidator(object):
     keeps track of the bleu scores over time
     """
     def __init__(self, state, lm_model,
-                beam_search, ignore_unk=False,
-                normalize=False, verbose=False,
-                score=False, n_best=1):
+                 beam_search, ignore_unk=False,
+                 normalize=False, verbose=False,
+                 score=False, n_best=1):
         """
         Handles normal book-keeping of state variables,
         but also reloads the bleu scores if they exists

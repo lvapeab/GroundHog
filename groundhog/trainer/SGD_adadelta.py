@@ -180,6 +180,11 @@ class SGD(object):
             batch = self.model.perturb(**batch)
         else:
             batch = self.model.perturb(*batch)
+
+        # Set the cross dictionary here
+        if self.state['use_cross_dict']:
+            batch['cross_dict'] = self.model.cross_dict
+
         # Load the dataset into GPU
         # Note: not the most efficient approach in general, as it involves
         # each batch is copied individually on gpu

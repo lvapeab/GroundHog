@@ -466,7 +466,7 @@ class RecurrentLayerWithSearch(Layer):
         # Calculate energy sums.
         normalizer = energy.sum(axis=0)
 
-        # Get probabilities.:w
+        # Get probabilities.
         probs = energy / normalizer
 
         # Calculate weighted sums of source annotations.
@@ -1294,7 +1294,8 @@ class Decoder(EncoderDecoderBase):
             given_init_states=None,
             T=1,
             prev_hid=None,
-            prev_memory=None):
+            prev_memory=None,
+            cross_dict=None):
         """Create the computational graph of the RNN Decoder.
 
         :param c:
@@ -1531,8 +1532,10 @@ class Decoder(EncoderDecoderBase):
                                                              reload_=True,
                                                              prev_mem=prev_memory,
                                                              mode=mode,
-                                                             inp=lstm_y)
+                                                             inp=lstm_y,
+                                                             cross_dict=cross_dict)
             else:
+                raise NotImplementedError('Only arctic lstm-lm supported!')
                 lm_hidden_state = self.LM_builder.build_for_translation(y, y_mask, prev_hid=prev_hid)
 
             check_first_word = (y > 0
@@ -1743,18 +1746,32 @@ class Decoder(EncoderDecoderBase):
         T = next(args)
         assert T.ndim == 0
 
+        # Final non_sequences is the cross dictionary
+        if self.state['use_cross_dict']:
+            cross_dict = next(args)
+        else:
+            cross_dict = None
+
         decoder_args = dict(given_init_states=prev_hidden_states, T=T, c=c,
                             prev_hid=last_hid_state, prev_memory=last_memory)
 
-        sample, log_prob = self.build_decoder(y=prev_word, step_num=step_num, mode=Decoder.SAMPLING, **decoder_args)[:2]
-        hidden_states = self.build_decoder(y=sample, step_num=step_num, mode=Decoder.SAMPLING, **decoder_args)[2:]
+        sample, log_prob = self.build_decoder(y=prev_word,
+                                              step_num=step_num,
+                                              mode=Decoder.SAMPLING,
+                                              cross_dict=cross_dict,
+                                              **decoder_args)[:2]
+        hidden_states = self.build_decoder(y=sample,
+                                           step_num=step_num,
+                                           mode=Decoder.SAMPLING,
+                                           cross_dict=cross_dict,
+                                           **decoder_args)[2:]
 
         return [sample, log_prob] + hidden_states
 
     def build_initializers(self, c):
         return [init(c).out for init in self.initializers]
 
-    def build_sampler(self, n_samples, n_steps, T, c):
+    def build_sampler(self, n_samples, n_steps, T, c, cross_dict=None):
 
         states = [TT.zeros(shape=(n_samples,), dtype='int64'),
                    TT.zeros(shape=(n_samples,), dtype='float32')]
@@ -1775,6 +1792,10 @@ class Decoder(EncoderDecoderBase):
         # Pad with final states
         non_sequences = [c, T]
 
+        # Add cross dictionary if necessary
+        if self.state['use_cross_dict']:
+            non_sequences += [cross_dict]
+
         outputs, updates = theano.scan(self.sampling_step,
                                        outputs_info=states,
                                        non_sequences=non_sequences,
@@ -1784,19 +1805,23 @@ class Decoder(EncoderDecoderBase):
 
         return (outputs[0], outputs[1]), updates
 
-    def build_next_probs_predictor(self, c, step_num, y, init_states, prev_hid, prev_memory=None):
+    def build_next_probs_predictor(self, c, step_num, y, init_states, prev_hid,
+                                   prev_memory=None, cross_dict=None):
         return self.build_decoder(c, y, mode=Decoder.BEAM_SEARCH,
                                   given_init_states=init_states,
                                   step_num=step_num,
                                   prev_hid=prev_hid,
-                                  prev_memory=prev_memory)
+                                  prev_memory=prev_memory,
+                                  cross_dict=cross_dict)
 
-    def build_next_states_computer(self, c, step_num, y, init_states, prev_hid, prev_memory=None):
+    def build_next_states_computer(self, c, step_num, y, init_states, prev_hid,
+                                   prev_memory=None, cross_dict=None):
         return self.build_decoder(c, y, mode=Decoder.SAMPLING,
                                   given_init_states=init_states,
                                   step_num=step_num,
                                   prev_hid=prev_hid,
-                                  prev_memory=prev_memory)[2:]
+                                  prev_memory=prev_memory,
+                                  cross_dict=cross_dict)[2:]
 
 class RNNEncoderDecoder(object):
     """This class encapsulates the translation model.
@@ -1856,6 +1881,8 @@ class RNNEncoderDecoder(object):
             self.state['source_splitted'] = False
         if 'optimize_probs' not in self.state:
             self.state['optimize_probs'] = True
+        if 'use_cross_dict' not in self.state:
+            self.state['use_cross_dict'] = False
         if 'use_hier_enc' not in self.state:
             self.state['use_hier_enc'] = False
         if 'vector_controller' not in self.state:
@@ -1869,7 +1896,9 @@ class RNNEncoderDecoder(object):
         self.x_mask = TT.matrix('x_mask')
         self.y = TT.lmatrix('y')
         self.y_mask = TT.matrix('y_mask')
-        self.inputs = [self.x, self.y, self.x_mask, self.y_mask]
+        self.cross_dict = TT.lmatrix('cross_dict')
+        self.inputs = [self.x, self.y, self.x_mask, self.y_mask,
+                       self.cross_dict]
 
         # Annotation for the log-likelihood computation
         training_c_components = []
@@ -1939,7 +1968,9 @@ class RNNEncoderDecoder(object):
 
         self.predictions, self.alignment, self.lm_alpha = self.decoder.build_decoder(c=Concatenate(axis=2)(*training_c_components),
                                                                       c_mask=self.x_mask,
-                                                                      y=self.y, y_mask=self.y_mask)
+                                                                      y=self.y,
+                                                                      y_mask=self.y_mask,
+                                                                      cross_dict=self.cross_dict)
 
         # Annotation for sampling
         sampling_c_components = []
@@ -1964,6 +1995,7 @@ class RNNEncoderDecoder(object):
         self.sampling_x = TT.lvector("sampling_x")
         self.n_samples = TT.lscalar("n_samples")
         self.n_steps = TT.lscalar("n_steps")
+        self.sampling_cross_dict = TT.lmatrix("sampling_cross_dict")
 
         #softmax temperature
         self.T = TT.scalar("T")
@@ -2002,7 +2034,9 @@ class RNNEncoderDecoder(object):
 
         (self.sample, self.sample_log_prob), self.sampling_updates =\
             self.decoder.build_sampler(self.n_samples, self.n_steps, self.T,
-                                       c=self.sampling_c)
+                                       c=self.sampling_c,
+                                       cross_dict=self.sampling_cross_dict if
+                                       self.state['use_cross_dict'] else None)
 
         logger.debug("Create auxiliary variables")
         self.c = TT.matrix("c")
@@ -2065,9 +2099,45 @@ class RNNEncoderDecoder(object):
                                  rng=self.rng,
                                  exclude_params=excluded_params,
                                  additional_ngrad_monitors=self.state['additional_ngrad_monitors'])
+
         self.lm_model.lm_alpha = self.lm_alpha
-        self.lm_model.name2pos = name2pos(self.lm_model.params)
         self.lm_model.load_dict(self.state)
+
+        # Get language models dictionary and create cross dictionary
+        if self.state['use_cross_dict']:
+            self.lm_model.lm_dict = \
+                lstmlm.load_dictionary(self.state['modelpath'])
+
+            self.lm_model.lm_idict = dict([[v,k] for k,v in
+                                            self.lm_model.lm_dict.items()])
+
+            self.lm_model.lm_options = \
+                lstmlm.load_options(self.state['modelpath'])
+
+            self.lm_model.lm_unk_idx = 1  #TODO: this may be different
+            self.lm_model.lm_eos_idx = self.lm_model.lm_options['n_words'] - 1
+
+            # Helpers
+            unk_idx = self.state['unk_sym_target']
+            eos_idx = self.state['null_sym_target']
+            n_words = self.lm_model.lm_options['n_words']
+
+            # Allocate
+            cross_dict = numpy.zeros((self.state['n_sym_target'], 1),
+                                     dtype='int64')
+
+            # Fill with mapped indices
+            for ii in xrange(self.state['n_sym_target']):
+                new_idx = self.lm_model.lm_dict.get(
+                    self.lm_model.word_indxs[ii], self.lm_model.lm_unk_idx)
+                cross_dict[ii] = new_idx if new_idx < n_words else unk_idx
+
+            # Fix for eos and unk indices
+            cross_dict[unk_idx] = self.lm_model.lm_unk_idx
+            cross_dict[eos_idx] = self.lm_model.lm_eos_idx
+            self.lm_model.cross_dict = cross_dict
+
+        self.lm_model.name2pos = name2pos(self.lm_model.params)
         logger.debug("Model params:\n{}".format(
             pprint.pformat(sorted([p.name for p in self.lm_model.params]))))
 
@@ -2095,7 +2165,8 @@ class RNNEncoderDecoder(object):
             return self.sample_fn
         logger.debug("Compile sampler")
         self.sample_fn = theano.function(
-                inputs=[self.n_samples, self.n_steps, self.T, self.sampling_x],
+                inputs=[self.n_samples, self.n_steps, self.T, self.sampling_x,
+                        self.sampling_cross_dict],
                 outputs=[self.sample, self.sample_log_prob],
                 updates=self.sampling_updates,
                 name="sample_fn")
@@ -2126,22 +2197,26 @@ class RNNEncoderDecoder(object):
     def create_next_probs_computer(self):
         if not hasattr(self, 'next_probs_fn'):
             self.next_probs_fn = theano.function(
-                    inputs=[self.c, self.step_num, self.gen_y] + self.lst_state_lm + self.current_states,
-                    outputs=[self.decoder.build_next_probs_predictor(self.c, self.step_num, self.gen_y,
-                                                                     self.current_states,
-                                                                     self.current_states_lm,
-                                                                     self.current_memory_lm)],
+                    inputs=[self.c, self.step_num, self.gen_y,
+                            self.sampling_cross_dict] +\
+                        self.lst_state_lm + self.current_states,
+                    outputs=[self.decoder.build_next_probs_predictor(
+                        self.c, self.step_num, self.gen_y, self.current_states,
+                        self.current_states_lm, self.current_memory_lm,
+                        cross_dict=self.sampling_cross_dict)],
                     name="next_probs_fn",on_unused_input='warn')#,mode='DebugMode')
         return self.next_probs_fn
 
     def create_next_states_computer(self):
         if not hasattr(self, 'next_states_fn'):
             self.next_states_fn = theano.function(
-                    inputs=[self.c, self.step_num, self.gen_y] + self.lst_state_lm + self.current_states,
-                    outputs=self.decoder.build_next_states_computer(self.c, self.step_num, self.gen_y,
-                                                                    self.current_states,
-                                                                    self.current_states_lm,
-                                                                    self.current_memory_lm),
+                    inputs=[self.c, self.step_num, self.gen_y,
+                            self.sampling_cross_dict] + \
+                        self.lst_state_lm + self.current_states,
+                    outputs=self.decoder.build_next_states_computer(
+                        self.c, self.step_num, self.gen_y, self.current_states,
+                        self.current_states_lm, self.current_memory_lm,
+                        cross_dict=self.sampling_cross_dict),
                     name="next_states_fn",on_unused_input='warn')
         return self.next_states_fn
 
