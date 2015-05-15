@@ -32,6 +32,10 @@ def parse_args():
     parser.add_argument("-v", "--vocab", type=int, metavar="N",
                         help="limit vocabulary size to this number, which must "
                           "include BOS/EOS and OOV markers")
+    parser.add_argument("-l", "--limit-before", type=int, metavar="N",
+                        default=0,
+                        help="limit vocabulary sizei before taking the union to this number, which must "
+                          "include BOS/EOS and OOV markers")
     parser.add_argument("-p", "--pickle", action="store_true",
                         help="pickle input text files as a list of lists of ints")
     parser.add_argument("-t", "--char", action="store_true",
@@ -110,7 +114,12 @@ def create_dictionary():
 
     # Part II: Combining the counts by taking intersection
     logger.info('Taking intersection of all vocabularies')
-    joint_dict = reduce(operator.and_,counters)
+    if args.limit_before>0:
+        for ii in xrange(len(counters)):
+            counters[ii] = Counter(
+                        dict(counters[ii].most_common(args.limit_before)))
+
+    joint_dict = reduce(operator.or_,counters)
 
     # Part III: Creating the dictionary
     if args.vocab is not None:
@@ -133,7 +142,7 @@ def create_dictionary():
     else:
         logger.info("Creating dictionary of all words")
         vocab_count = joint_dict.most_common()
-    vocab = {'UNK': 1, '<s>': 0, '</s>': 0}
+    vocab = {'<UNK>': 1, '<S>': 0, '</S>': 0}
     for i, (word, count) in enumerate(vocab_count):
         vocab[word] = i + 2
     safe_pickle(vocab, args.dictionary)

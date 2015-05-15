@@ -3744,12 +3744,13 @@ def prototype_search_state_fi_en_withLM_gigaword_adadelta_vecLMController_reshuf
     state['lm_readout_dim'] = 2000
     state['bs'] = 80
 
+    # language model params
     state['include_lm'] = True
     state['reload_lm'] = True
     state['reload'] = True
     state['train_only_readout'] = True
     state['random_readout'] = False
-
+    state['use_cross_dict'] = True
     state['controller_temp'] = 1.0
     state['use_lm_control'] = 1
     state['vector_controller'] = True

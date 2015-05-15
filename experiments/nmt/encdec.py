@@ -2104,6 +2104,7 @@ class RNNEncoderDecoder(object):
         self.lm_model.load_dict(self.state)
 
         # Get language models dictionary and create cross dictionary
+        self.lm_model.cross_dict = None
         if self.state['use_cross_dict']:
             self.lm_model.lm_dict = \
                 lstmlm.load_dictionary(self.state['modelpath'])
@@ -2169,7 +2170,8 @@ class RNNEncoderDecoder(object):
                         self.sampling_cross_dict],
                 outputs=[self.sample, self.sample_log_prob],
                 updates=self.sampling_updates,
-                name="sample_fn")
+                name="sample_fn",
+                on_unused_input='warn')
         if not many_samples:
             def sampler(*args):
                 return map(lambda x : x.squeeze(), self.sample_fn(1, *args))

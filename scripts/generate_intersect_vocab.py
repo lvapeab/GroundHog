@@ -27,7 +27,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("input", type=argparse.FileType('r'), nargs="*",
                         help="The input files")
-    parser.add_argument("-d", "--dictionary", default='joint_vocab.pkl',
+    parser.add_argument("-d", "--dictionary", default='intersect_vocab.pkl',
                         help="the name of the pickled binarized text file")
     parser.add_argument("-v", "--vocab", type=int, metavar="N",
                         help="limit vocabulary size to this number, which must "
@@ -110,6 +110,7 @@ def create_dictionary():
 
     # Part II: Combining the counts by taking intersection
     logger.info('Taking intersection of all vocabularies')
+    import ipdb;ipdb.set_trace()
     intersect_dict = reduce(operator.and_,counters)
 
     # Part III: Creating the dictionary
@@ -133,7 +134,6 @@ def create_dictionary():
     else:
         logger.info("Creating dictionary of all words")
         vocab_count = intersect_dict.most_common()
-    import ipdb;ipdb.set_trace()
     vocab = {'<UNK>': 1, '<S>': 0, '</S>': 0}
     for i, (word, count) in enumerate(vocab_count):
         vocab[word] = i + 2

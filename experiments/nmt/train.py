@@ -175,11 +175,14 @@ class BleuValidator(object):
             seq, parsed_in = parse_input(self.state, self.indx_word, seqin, idx2word=self.idict_src)
 
             # draw sample, checking to ensure we don't get an empty string back
-            trans, costs, _ = self.sample_fn(self.lm_model, seq,
-                                             self.n_samples,
-                                             beam_search=self.beam_search,
-                                             ignore_unk=self.ignore_unk,
-                                             normalize=self.normalize)
+            trans, costs, _ = self.sample_fn(
+                self.lm_model, seq,
+                self.n_samples,
+                beam_search=self.beam_search,
+                ignore_unk=self.ignore_unk,
+                normalize=self.normalize,
+                cross_dict=self.lm_model.cross_dict
+                if hasattr(self.lm_model, 'cross_dict') else None)
 
             nbest_idx = numpy.argsort(costs)[:self.n_best]
             for j, best in enumerate(nbest_idx):

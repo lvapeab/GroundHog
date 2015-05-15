@@ -43,16 +43,18 @@ class BeamSearch(object):
         self.comp_next_probs = self.enc_dec.create_next_probs_computer()
         self.comp_next_states = self.enc_dec.create_next_states_computer()
 
-    def search(self, seq, n_samples, ignore_unk=False, minlen=1):
+    def search(self, seq, n_samples, ignore_unk=False, minlen=1, cross_dict=None):
         c = self.comp_repr(seq)[0]
-        states = map(lambda x : x[None, :], self.comp_init_states(c))
+        states = map(lambda x: x[None, :], self.comp_init_states(c))
         dim = states[0].shape[1]
 
+        # Set initial states of  the language
+        # model inside of the decoder
         states_lm = None
         states_mem_lm = None
         if self.enc_dec.state['include_lm']:
             dim_lm = self.enc_dec.decoder.state['lm_readout_dim']
-            states_lm = numpy.zeros((1,dim_lm),dtype="float32")
+            states_lm = numpy.zeros((1, dim_lm), dtype="float32")
             if self.enc_dec.state['use_arctic_lm']:
                 states_mem_lm = numpy.zeros((1, dim_lm), dtype="float32")
 
@@ -68,6 +70,7 @@ class BeamSearch(object):
             if n_samples == 0:
                 break
 
+            # reset states of the decoders language model
             new_states_lm = None
             new_states_mem_lm = None
             if self.enc_dec.state['include_lm']:
@@ -78,7 +81,7 @@ class BeamSearch(object):
             # Compute probabilities of the next words for
             # all the elements of the beam.
             beam_size = len(trans)
-            last_words = (numpy.array(map(lambda t : t[-1], trans))
+            last_words = (numpy.array(map(lambda t: t[-1], trans))
                     if k > 0
                     else numpy.zeros(beam_size, dtype="int64"))
             '''
@@ -91,7 +94,9 @@ class BeamSearch(object):
             else:
                 log_probs = numpy.log(self.comp_next_probs(c, k, last_words, *states)[0])
             '''
-            log_probs = numpy.log(self.comp_next_probs(c, k, last_words, states_lm, states_mem_lm, *states)[0])
+            log_probs = numpy.log(self.comp_next_probs(
+                                  c, k, last_words, cross_dict,
+                                  states_lm, states_mem_lm, *states)[0])
 
             # Adjust log probs according to search restrictions
             if ignore_unk:
@@ -124,10 +129,13 @@ class BeamSearch(object):
 
             for i, (orig_idx, next_word, next_cost) in enumerate(
                     zip(trans_indices, word_indices, costs)):
+
                 new_trans[i] = trans[orig_idx] + [next_word]
                 new_costs[i] = next_cost
+
                 for level in range(num_levels):
                     new_states[level][i] = states[level][orig_idx]
+
                 if self.enc_dec.state['include_lm']:
                     new_states_lm[i] = states_lm[orig_idx]
                     if self.enc_dec.state['use_arctic_lm']:
@@ -148,13 +156,15 @@ class BeamSearch(object):
             '''
             if self.enc_dec.state['include_lm']:
                 if self.enc_dec.state['use_arctic_lm']:
-                    new_states, new_states_lm, new_states_mem_lm = self.comp_next_states(c, k,
-                            inputs, new_states_lm, new_states_mem_lm, *new_states)
+                    new_states, new_states_lm, new_states_mem_lm = self.comp_next_states(
+                            c, k, inputs, cross_dict,
+                            new_states_lm, new_states_mem_lm, *new_states)
                 else:
-                    new_states, new_states_lm = self.comp_next_states(c, k,
-                            inputs, new_states_lm, new_states_mem_lm, *new_states)
+                    new_states, new_states_lm = self.comp_next_states(
+                            c, k, inputs, cross_dict,
+                            new_states_lm, new_states_mem_lm, *new_states)
             else:
-                new_states = self.comp_next_states(c, k, inputs,
+                new_states = self.comp_next_states(c, k, inputs, cross_dict,
                                                    new_states_lm,
                                                    new_states_mem_lm,
                                                    *new_states)
@@ -175,21 +185,22 @@ class BeamSearch(object):
                     fin_costs.append(new_costs[i])
 
             if self.enc_dec.state['include_lm']:
-                states = map(lambda x : x[indices], [new_states])
+                states = map(lambda x: x[indices], [new_states])
                 states_lm = new_states_lm[indices]
                 if self.enc_dec.state['use_arctic_lm']:
                     states_mem_lm = new_states_mem_lm[indices]
             else:
-                states = map(lambda x : x[indices], new_states)
+                states = map(lambda x: x[indices], new_states)
 
         # Dirty tricks to obtain any translation
         if not len(fin_trans):
             if ignore_unk:
                 logger.warning("Did not manage without UNK")
-                return self.search(seq, n_samples, False, minlen)
+                return self.search(seq, n_samples, False, minlen, cross_dict)
             elif n_samples < 500:
                 logger.warning("Still no translations: try beam size {}".format(n_samples * 2))
-                return self.search(seq, n_samples * 2, False, minlen)
+                return self.search(seq, n_samples * 2, False, minlen,
+                                   cross_dict)
             else:
                 logger.error("Translation failed")
         fin_trans = numpy.array(fin_trans)[numpy.argsort(fin_costs)]
@@ -205,13 +216,14 @@ def indices_to_words(i2w, seq):
     return sen
 
 def sample(lm_model, seq, n_samples,
-        sampler=None, beam_search=None,
-        ignore_unk=False, normalize=False,
-        alpha=1, verbose=False):
+           sampler=None, beam_search=None,
+           ignore_unk=False, normalize=False,
+           alpha=1, verbose=False, cross_dict=None):
     if beam_search:
         sentences = []
-        trans, costs = beam_search.search(seq, n_samples,
-                ignore_unk=ignore_unk, minlen=len(seq) / 2)
+        trans, costs = beam_search.search(
+            seq, n_samples, cross_dict=cross_dict,
+            ignore_unk=ignore_unk, minlen=len(seq) / 2)
         if normalize:
             counts = [len(s) for s in trans]
             costs = [co / cn for co, cn in zip(costs, counts)]
@@ -226,6 +238,7 @@ def sample(lm_model, seq, n_samples,
         sentences = []
         all_probs = []
         costs = []
+
         values, cond_probs = sampler(n_samples, 3 * (len(seq) - 1), alpha, seq)
         for sidx in xrange(n_samples):
             sen = []
@@ -287,6 +300,8 @@ def parse_args():
     parser.add_argument("changes",
             nargs="?", default="",
             help="Changes to state")
+    parser.add_argument("--cross-dict", action="store_true", default=False,
+                        help="Build cross dictionary from TM indices to LM indices")
     return parser.parse_args()
 
 def main():
@@ -336,6 +351,11 @@ def main():
 
         n_samples = args.beam_size
 
+        # Build cross dictionary
+        cross_dict=None
+        if hasattr(self.lm_model,'cross_dict'):
+            cross_dict=self.lm_model.cross_dict
+
         total_cost = 0.0
         logging.debug("Beam size: {}".format(n_samples))
         for i, line in enumerate(fsrc):
@@ -347,8 +367,12 @@ def main():
             seq, parsed_in = parse_input(state, indx_word, seqin, idx2word=idict_src)
             if args.verbose:
                 print "Parsed Input:", parsed_in
+
             trans, costs, _ = sample(lm_model, seq, n_samples, sampler=sampler,
-                    beam_search=beam_search, ignore_unk=args.ignore_unk, normalize=args.normalize)
+                                     beam_search=beam_search, ignore_unk=args.ignore_unk,
+                                     normalize=args.normalize,
+                                     cross_dict=cross_dict,
+                                     verbose=args.verbose)
             nbest_idx = numpy.argsort(costs)[:args.n_best]
             for j, best in enumerate(nbest_idx):
                 if state['target_encoding'] == 'utf8':
@@ -368,6 +392,7 @@ def main():
                 total_cost += costs[best]
 
             if (i + 1) % 100 == 0:
+                ftrans.flush()
                 logger.debug("Current speed is {} per sentence".
                         format((time.time() - start_time) / (i + 1)))
 
@@ -394,7 +419,7 @@ def main():
                 print "Exception while parsing your input:"
                 traceback.print_exc()
                 continue
-            import ipdb;ipdb.set_trace()
+
             sample(lm_model, seq, n_samples, sampler=sampler,
                     beam_search=beam_search,
                     ignore_unk=args.ignore_unk, normalize=args.normalize,

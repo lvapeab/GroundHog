@@ -396,14 +396,18 @@ def sample(lm_model, seq, n_samples,
             probs = numpy.array(cond_probs[:len(sen) + 1, sidx])
             all_probs.append(numpy.exp(-probs))
             costs.append(-numpy.sum(probs))
+
         if normalize:
             counts = [len(s.strip().split(" ")) for s in sentences]
             costs = [co / cn for co, cn in zip(costs, counts)]
+
         sprobs = numpy.argsort(costs)
+
         if verbose:
             for pidx in sprobs:
                 print "{}: {} {} {}".format(pidx, -costs[pidx], all_probs[pidx], sentences[pidx])
             print
+
         return sentences, costs, None
     else:
         raise Exception("I don't know what to do")
@@ -468,8 +472,10 @@ def main():
     logging.basicConfig(level=getattr(logging, state['level']), format="%(asctime)s: %(name)s: %(levelname)s: %(message)s")
 
     rng = numpy.random.RandomState(state['seed'])
+
     enc_dec = RNNEncoderDecoder(state, rng, skip_init=True)
     enc_dec.build()
+
     lm_model = enc_dec.create_lm_model()
     lm_model.load(args.model_path)
     indx_word = cPickle.load(open(state['word_indx'],'rb'))
@@ -499,6 +505,7 @@ def main():
         sampler = enc_dec.create_sampler(many_samples=True)
 
     idict_src = cPickle.load(open(state['indx_word'],'r'))
+
     if args.source and args.trans:
         # Actually only beam search is currently supported here
         assert beam_search
